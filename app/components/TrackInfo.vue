@@ -24,7 +24,6 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
 import { useMediaPlayer } from '@/composables/useMediaPlayer';
 import { Music } from 'lucide-vue-next';
 
@@ -35,6 +34,7 @@ const props = defineProps({
   },
 });
 
-const mediaPlayerRef = ref(props.mediaPlayer);
-const { state, isVideo, hasCurrentTrack } = useMediaPlayer(mediaPlayerRef);
+const { mediaPlayer } = toRefs(props);
+
+const { state, isVideo, hasCurrentTrack } = useMediaPlayer(mediaPlayer.value);
 </script>

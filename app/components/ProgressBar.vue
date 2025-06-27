@@ -1,53 +1,87 @@
 <template>
-  <div
-    ref="progressRef"
-    :class="['relative group cursor-pointer', className]"
-    @click="handleClick"
-  >
+  <div class="flex items-center gap-2 w-full">
+    <!-- <span class="text-xs text-muted-foreground tabular-nums min-w-[35px] text-right">
+      {{ formatTime(displayTime) }}
+    </span> -->
     <Slider
-      :model-value="[currentTime]"
-      :max="duration"
+      v-model:model-value="sliderPosition"
+      :max="100"
       :step="0.1"
-      :disabled="duration === 0"
-      class="w-full"
-      @update:model-value="handleSliderChange"
-      @value-commit="handleSliderCommit"
+      class="flex-1 h-1 cursor-pointer"
+      :disabled="!duration || isLoading"
+      @value-commit="onSeekCommit"
     />
+    <!-- <span class="text-xs text-muted-foreground tabular-nums min-w-[35px] text-left">
+      {{ formatTime(duration) }}
+    </span> -->
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { Slider } from '@/components/ui/slider';
 
 const props = defineProps({
   currentTime: { type: Number, required: true },
   duration: { type: Number, required: true },
-  className: { type: String, default: '' },
+  isLoading: { type: Boolean, default: false },
 });
+
+const { currentTime, duration, isLoading } = toRefs(props);
 
 const emit = defineEmits(['seek']);
 
-const progressRef = ref(null);
+const isSeeking = ref(false);
+const scrubTime = ref(0);
 
-const handleSliderChange = (value) => {
-  // This is called during dragging - we could show a preview here
-  // but we don't emit seek yet to avoid too many updates
+const sliderPosition = computed({
+  get() {
+    const timeSource = isSeeking.value ? scrubTime.value : currentTime.value;
+    if (!duration.value || isNaN(duration.value) || duration.value === 0) {
+      return [0];
+    }
+    return [(timeSource / duration.value) * 100];
+  },
+  set(value) {
+    if (!duration.value) return;
+    isSeeking.value = true;
+    scrubTime.value = ((value[0] || 0) / 100) * duration.value;
+  },
+});
+
+const onSeekCommit = (value) => {
+  if (!duration.value) return;
+  const finalTime = ((value[0] || 0) / 100) * duration.value;
+  emit('seek', finalTime);
 };
 
-const handleSliderCommit = (value) => {
-  // This is called when the user releases the slider
-  emit('seek', value[0]);
-};
+watch(() => currentTime, (newPlayerTime) => {
+  if (isSeeking.value) {
+    if (Math.abs(newPlayerTime - scrubTime.value) < 0.5) {
+      isSeeking.value = false;
+    }
+  }
+});
 
-const handleClick = (e) => {
-  if (!progressRef.value || props.duration === 0) return;
+const displayTime = computed(() => {
+  if (isSeeking.value) {
+    return scrubTime.value;
+  }
+  return props.currentTime;
+});
+
+// Format time in MM:SS or HH:MM:SS format
+const formatTime = (seconds) => {
+  if (!seconds || isNaN(seconds)) return '0:00';
   
-  // Calculate the time based on click position
-  const rect = progressRef.value.getBoundingClientRect();
-  const position = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-  const time = position * props.duration;
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
   
-  emit('seek', time);
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  } else {
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  }
 };
 </script>

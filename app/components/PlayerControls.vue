@@ -5,6 +5,7 @@
       <ProgressBar
         :current-time="state.currentTime"
         :duration="state.duration"
+        :is-loading="state.isLoading"
         @seek="(time) => mediaPlayer.seek(time)"
         class="absolute -top-1 left-0 right-0 h-1"
       />
@@ -60,7 +61,6 @@
           <!-- Media Type Selector -->
           <MediaTypeSelector 
             :media-player="mediaPlayer"
-            @preference-changed="handlePreferenceChanged"
           />
           <!-- Video Display Controls (only for video content and when not in normal mode) -->
           <VideoDisplay
@@ -70,12 +70,7 @@
             @toggle-fullscreen="handleToggleFullscreen"
           />
           <QualitySelector
-            :track="state.currentTrack"
-            :active-source="state.activeSource"
-            :plugin-options="state.pluginOptions || []"
-            :active-plugin-option-id="state.activePluginOptionId"
-            @select-source="(source) => mediaPlayer.setActiveSource(source)"
-            @select-plugin-option="(optionId) => mediaPlayer.setPluginOption(optionId)"
+            :media-player="mediaPlayer"
           />
         </div>
       </div>
@@ -109,7 +104,9 @@ const props = defineProps({
   },
 });
 
-const mediaPlayerRef = ref(props.mediaPlayer);
+const { mediaPlayer } = toRefs(props);
+
+// const mediaPlayerRef = ref(props.mediaPlayer);
 const { 
   state, 
   isPlaying, 
@@ -119,11 +116,11 @@ const {
   hasCurrentTrack, 
   canGoNext, 
   canGoPrevious 
-} = useMediaPlayer(mediaPlayerRef);
+} = useMediaPlayer(mediaPlayer);
 const displayMode = ref('normal');
 
 const handleToggleFullscreen = async () => {
-  const videoElement = props.mediaPlayer.getActiveHTMLElement();
+  const videoElement = mediaPlayer.value.getActiveHTMLElement();
   if (videoElement && videoElement instanceof HTMLVideoElement) {
     try {
       if (document.fullscreenElement) {
@@ -138,7 +135,7 @@ const handleToggleFullscreen = async () => {
 };
 
 const handleTogglePip = async () => {
-  const videoElement = props.mediaPlayer.getActiveHTMLElement();
+  const videoElement = mediaPlayer.value.getActiveHTMLElement();
   if (videoElement && videoElement instanceof HTMLVideoElement) {
     try {
       if (document.pictureInPictureElement) {
@@ -155,15 +152,9 @@ const handleTogglePip = async () => {
 const onFullscreenChange = () => (displayMode.value = document.fullscreenElement ? 'fullscreen' : 'normal');
 const onPipChange = () => (displayMode.value = document.pictureInPictureElement ? 'pip' : 'normal');
 
-const handlePreferenceChanged = (newMode) => {
-  console.log('Media type preference changed to:', newMode);
-  // The MediaTypeSelector component already handles the preference update
-  // We could add additional logic here if needed
-};
-
 const setupEventListeners = () => {
   document.addEventListener('fullscreenchange', onFullscreenChange);
-  const videoEl = props.mediaPlayer.getActiveHTMLElement();
+  const videoEl = mediaPlayer.value.getActiveHTMLElement();
   if (videoEl) {
     videoEl.addEventListener('enterpictureinpicture', onPipChange);
     videoEl.addEventListener('leavepictureinpicture', onPipChange);
@@ -172,7 +163,7 @@ const setupEventListeners = () => {
 
 const cleanupEventListeners = () => {
   document.removeEventListener('fullscreenchange', onFullscreenChange);
-  const videoEl = props.mediaPlayer.getActiveHTMLElement();
+  const videoEl = mediaPlayer.value.getActiveHTMLElement();
   if (videoEl) {
     videoEl.removeEventListener('enterpictureinpicture', onPipChange);
     videoEl.removeEventListener('leavepictureinpicture', onPipChange);

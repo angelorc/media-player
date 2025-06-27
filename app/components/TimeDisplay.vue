@@ -1,8 +1,10 @@
 <script setup>
-defineProps({
+const props = defineProps({
   currentTime: { type: Number, required: true },
   duration: { type: Number, required: true },
 });
+
+const { currentTime, duration } = toRefs(props);
 
 const formatTime = (seconds) => {
   if (!isFinite(seconds) || seconds < 0) return "0:00";
