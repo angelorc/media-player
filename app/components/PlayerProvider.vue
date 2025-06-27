@@ -86,7 +86,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <!-- This is the hidden "engine room" where the video should be created. -->
+  <!-- This is the "engine room" where the video/audio elements are created -->
   <div ref="mediaContainerRef" class="media-container" />
 
   <!-- Your application content -->
@@ -99,13 +99,30 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* This ensures the container is hidden and doesn't affect your layout */
+/* 
+ * The media container is positioned off-screen but accessible
+ * This allows video elements to be moved to the thumbnail when needed
+ */
 .media-container {
-  position: absolute;
-  width: 0;
-  height: 0;
+  position: fixed;
+  top: -9999px;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
   overflow: hidden;
   pointer-events: none;
   opacity: 0;
+  z-index: -1;
+}
+
+/* When video is in fullscreen or PiP, it should be visible */
+.media-container:has(video:fullscreen),
+.media-container:has(video:picture-in-picture) {
+  position: static;
+  width: auto;
+  height: auto;
+  opacity: 1;
+  pointer-events: auto;
+  z-index: auto;
 }
 </style>

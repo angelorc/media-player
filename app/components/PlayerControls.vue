@@ -1,19 +1,33 @@
 <template>
   <div v-if="state && state.currentTrack" class="fixed bottom-0 left-0 right-0 z-50">
     <div class="relative w-full border-t bg-background/80 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60">
-      <!-- FIX: Wrapped in arrow function to preserve 'this' context -->
+      <!-- Progress Bar -->
       <ProgressBar
         :current-time="state.currentTime"
         :duration="state.duration"
         @seek="(time) => mediaPlayer.seek(time)"
         class="absolute -top-1 left-0 right-0 h-1"
       />
-      <div class="flex items-center justify-between px-4 py-2">
+      
+      <div class="flex items-center justify-between px-4 py-2 gap-4">
+        <!-- Left section: Video Thumbnail + Track Info -->
         <div class="flex items-center gap-4 flex-1 min-w-0">
-          <TrackInfo :media-player="mediaPlayer" />
+          <!-- Video Thumbnail (only shown for video content) -->
+          <VideoThumbnail
+            v-if="isVideo"
+            :media-player="mediaPlayer"
+            :display-mode="displayMode"
+            @toggle-pip="handleTogglePip"
+            @toggle-fullscreen="handleToggleFullscreen"
+            class="flex-shrink-0"
+          />
+          
+          <!-- Track Info -->
+          <TrackInfo :media-player="mediaPlayer" class="min-w-0" />
         </div>
-        <div class="flex items-center gap-2">
-          <!-- These were already correct since they are direct calls -->
+
+        <!-- Center section: Playback Controls -->
+        <div class="flex items-center gap-2 flex-shrink-0">
           <Button variant="ghost" size="icon" @click="mediaPlayer.previous()" :disabled="!canGoPrevious" title="Previous">
             <SkipBack class="h-5 w-5" />
           </Button>
@@ -33,22 +47,23 @@
             <SkipForward class="h-5 w-5" />
           </Button>
         </div>
+
+        <!-- Right section: Additional Controls -->
         <div class="flex items-center gap-2 flex-1 justify-end">
           <TimeDisplay :current-time="state.currentTime" :duration="state.duration" />
-          <!-- FIX: Wrapped in arrow functions to preserve 'this' context -->
           <VolumeControl
             :volume="state.volume"
             :is-muted="state.isMuted"
             @volume-change="(volume) => mediaPlayer.setVolume(volume)"
             @toggle-mute="mediaPlayer.toggleMute"
           />
+          <!-- Video Display Controls (only for video content and when not in normal mode) -->
           <VideoDisplay
-            v-if="isVideo"
+            v-if="isVideo && displayMode !== 'normal'"
             :display-mode="displayMode"
             @toggle-pip="handleTogglePip"
             @toggle-fullscreen="handleToggleFullscreen"
           />
-          <!-- FIX: Wrapped in arrow functions to preserve 'this' context -->
           <QualitySelector
             :track="state.currentTrack"
             :active-source="state.activeSource"
@@ -59,6 +74,8 @@
           />
         </div>
       </div>
+      
+      <!-- Error Display -->
       <div v-if="state.error" class="text-xs text-destructive bg-destructive/10 p-2 mx-4 mb-2 rounded-md border border-destructive/20">
         Error: {{ state.error }}
       </div>
@@ -67,12 +84,12 @@
 </template>
 
 <script setup>
-// The <script setup> block remains the same as before.
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useMediaPlayer } from '@/composables/useMediaPlayer';
 import { Button } from '@/components/ui/button';
 import { Play, Pause, SkipBack, SkipForward, Loader2 } from 'lucide-vue-next';
 import VideoDisplay from './VideoDisplay.vue';
+import VideoThumbnail from './VideoThumbnail.vue';
 import ProgressBar from './ProgressBar.vue';
 import VolumeControl from './VolumeControl.vue';
 import QualitySelector from './QualitySelector.vue';
