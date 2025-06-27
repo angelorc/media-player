@@ -75,7 +75,7 @@ export class HlsJsPlugin implements PlayerPlugin {
     const hlsConfig: Partial<HlsConfig> = {
       debug: false, 
       maxBufferLength: 30,
-      maxMaxBufferLength: 120,
+      maxMaxBufferLength: 30,
       maxBufferHole: 1.0,
       manifestLoadingMaxRetry: 3,
       manifestLoadingRetryDelay: 1000,
