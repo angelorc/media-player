@@ -74,6 +74,114 @@ export const DEMO_TRACKS = [
     ],
   },
   {
+    id: "btsg-anthem",
+    metadata: {
+      title: "BitSong Anthem",
+      artist: "Goose Pärk, GiiipsonPoet",
+      artwork: "https://media-api-direct.bitsong.studio/ipfs/QmQEyJ3s9guN3uPorB4ZA89tQNNvTgNNAhT3wBdqAUr4tX",
+    },
+    sources: [
+      {
+        src: "https://media-storage-test.bitsong.io/0197b26c-62d0-71db-91a7-0b3ef1f02b4b/audio/hls/master.m3u8",
+        format: "hls",
+        mediaType: "audio",
+        quality: "Audio (HLS)",
+      },
+      {
+        src: "https://media-storage-test.bitsong.io/0197b26c-62d0-71db-91a7-0b3ef1f02b4b/audio/opus/1a645bfa9c1a1c06a05f2bbb66f181ec.opus",
+        format: "opus",
+        mediaType: "audio",
+        quality: "Audio (Opus)",
+      },
+      {
+        src: "https://media-storage-test.bitsong.io/0197b26c-62d0-71db-91a7-0b3ef1f02b4b/audio/mp3/1a645bfa9c1a1c06a05f2bbb66f181ec.mp3",
+        format: "mp3",
+        mediaType: "audio",
+        quality: "Audio (MP3)",
+      },
+      {
+        src: "https://media-storage-test.bitsong.io/0197b26c-62d0-71db-91a7-0b3ef1f02b4b/audio/aac/1a645bfa9c1a1c06a05f2bbb66f181ec.m4a",
+        format: "aac",
+        mediaType: "audio",
+        quality: "Audio (AAC)",
+      },
+    ],
+  },
+  {
+    id: "anything-i-do",
+    metadata: {
+      title: "Anything I Do",
+      artist: "BlackJack, Hamster NFT",
+      artwork: "https://media-api-direct.bitsong.studio/ipfs/QmcwP241RSACz8LcZy8ms49TSpgGheq8ejRHPsXRaJZDwP",
+    },
+    sources: [
+      {
+        src: "https://media-storage-test.bitsong.io/0197b26f-89a4-7582-836b-b10e5836c003/video/hls-video/master.m3u8",
+        format: "hls",
+        mediaType: "video",
+        quality: "Video (HLS)",
+      },
+      {
+        src: "https://media-storage-test.bitsong.io/0197b26f-89a4-7582-836b-b10e5836c003/audio/hls/master.m3u8",
+        format: "hls",
+        mediaType: "audio",
+        quality: "Audio (HLS)",
+      },
+      {
+        src: "https://media-storage-test.bitsong.io/0197b26f-89a4-7582-836b-b10e5836c003/audio/opus/ea9b650cbe4cab1adb6dc0c147983101.opus",
+        format: "opus",
+        mediaType: "audio",
+        quality: "Audio (Opus)",
+      },
+      {
+        src: "https://media-storage-test.bitsong.io/0197b26f-89a4-7582-836b-b10e5836c003/audio/mp3/ea9b650cbe4cab1adb6dc0c147983101.mp3",
+        format: "mp3",
+        mediaType: "audio",
+        quality: "Audio (MP3)",
+      },
+      {
+        src: "https://media-storage-test.bitsong.io/0197b26f-89a4-7582-836b-b10e5836c003/audio/aac/ea9b650cbe4cab1adb6dc0c147983101.m4a",
+        format: "aac",
+        mediaType: "audio",
+        quality: "Audio (AAC)",
+      },
+    ],
+  },
+  {
+    id: "glory",
+    metadata: {
+      title: "Glory",
+      artist: "Triplo Max",
+      artwork: "https://media-api-direct.bitsong.studio/ipfs/QmRpEuACERGTLctqQaAjiPfQnj8XrzUkF8o6rmLLhCvSzg",
+    },
+    sources: [
+      {
+        src: "https://media-storage-test.bitsong.io/0197b272-83f1-7b3e-8e14-a6df22cb70ad/audio/hls/master.m3u8",
+        format: "hls",
+        mediaType: "audio",
+        quality: "Audio (HLS)",
+      },
+      {
+        src: "https://media-storage-test.bitsong.io/0197b272-83f1-7b3e-8e14-a6df22cb70ad/audio/opus/d33ff8fe5a7cbdd82d19af2ce0d785f8.opus",
+        format: "opus",
+        mediaType: "audio",
+        quality: "Audio (Opus)",
+      },
+      {
+        src: "https://media-storage-test.bitsong.io/0197b272-83f1-7b3e-8e14-a6df22cb70ad/audio/mp3/d33ff8fe5a7cbdd82d19af2ce0d785f8.mp3",
+        format: "mp3",
+        mediaType: "audio",
+        quality: "Audio (MP3)",
+      },
+      {
+        src: "https://media-storage-test.bitsong.io/0197b272-83f1-7b3e-8e14-a6df22cb70ad/audio/aac/d33ff8fe5a7cbdd82d19af2ce0d785f8.m4a",
+        format: "aac",
+        mediaType: "audio",
+        quality: "Audio (AAC)",
+      },
+    ],
+  },
+  {
     id: "big-buck-bunny",
     metadata: {
       title: "Big Buck Bunny",

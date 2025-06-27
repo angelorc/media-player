@@ -194,12 +194,12 @@ watch(() => state.value?.activeSource?.src, () => {
             :media-player="mediaPlayer"
           />
           <!-- Video Display Controls (only for video content and when not in normal mode) -->
-          <VideoDisplay
+          <!-- <VideoDisplay
             v-if="isVideo && displayMode !== 'normal'"
             :display-mode="displayMode"
             @toggle-pip="handleTogglePip"
             @toggle-fullscreen="handleToggleFullscreen"
-          />
+          /> -->
           <QualitySelector
             :media-player="mediaPlayer"
           />
