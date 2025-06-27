@@ -1,106 +1,121 @@
-import { ref, computed, watch, onUnmounted } from 'vue';
-import type { PlayerState, Subscription } from '@/lib/types';
+import { ref, computed, readonly, onUnmounted } from 'vue'
+import type { PlayerState, Subscription } from '~/lib/types'
 
-export function useMediaPlayer(mediaPlayerRef: any) {
-  const state = ref<PlayerState | null>(null);
-  const subscription = ref<Subscription | null>(null);
+/**
+ * Composable for accessing the global MediaPlayer instance and reactive state
+ * Uses the MediaPlayer instance provided by the Nuxt plugin
+ */
+export function useMediaPlayer() {
+  // Get MediaPlayer instance from Nuxt plugin
+  const { $mediaPlayer } = useNuxtApp()
+  
+  if (!$mediaPlayer) {
+    throw new Error('MediaPlayer plugin not found. Make sure the plugin is properly configured.')
+  }
 
-  // Computed properties for common state checks
-  const isPlaying = computed(() => state.value?.isPlaying ?? false);
-  const isLoading = computed(() => state.value?.isLoading ?? false);
-  const hasError = computed(() => !!state.value?.error);
-  const isVideo = computed(() => state.value?.activeSource?.mediaType === 'video');
-  const isAudio = computed(() => state.value?.activeSource?.mediaType === 'audio');
-  const hasCurrentTrack = computed(() => !!state.value?.currentTrack);
-  const canGoNext = computed(() => {
-    if (!state.value) return false;
-    return state.value.currentIndex < state.value.queue.length - 1;
-  });
-  const canGoPrevious = computed(() => {
-    if (!state.value) return false;
-    return state.value.currentIndex > 0;
-  });
-  const progress = computed(() => {
-    if (!state.value || !state.value.duration) return 0;
-    return state.value.currentTime / state.value.duration;
-  });
-  const formattedCurrentTime = computed(() => {
-    if (!state.value) return '0:00';
-    return formatTime(state.value.currentTime);
-  });
-  const formattedDuration = computed(() => {
-    if (!state.value) return '0:00';
-    return formatTime(state.value.duration);
-  });
-
-  // Helper function to format time
-  const formatTime = (seconds: number): string => {
-    if (!seconds || isNaN(seconds)) return '0:00';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // Watch for changes in mediaPlayerRef and manage subscription
-  watch(mediaPlayerRef, (newMediaPlayer, oldMediaPlayer, onCleanup) => {
-    // Clean up previous subscription
-    if (subscription.value) {
-      subscription.value.unsubscribe();
-      subscription.value = null;
-    }
-
-    if (!newMediaPlayer) {
-      state.value = null;
-      return;
-    }
-
-    try {
-      // Subscribe to state changes
-      subscription.value = newMediaPlayer.subscribe((newState: PlayerState) => {
-        state.value = newState;
-      });
-
-      // The onCleanup function is called when the watcher is stopped
-      // or before the callback is executed again.
-      onCleanup(() => {
-        if (subscription.value) {
-          subscription.value.unsubscribe();
-          subscription.value = null;
-        }
-      });
-    } catch (error) {
-      console.error('Error subscribing to media player state:', error);
-      state.value = null;
-    }
-  }, { immediate: true }); // immediate: true runs the callback right away
-
-  // Clean up subscription when component unmounts
+  // Reactive state from MediaPlayer
+  const state = ref<PlayerState>($mediaPlayer.getState())
+  // const state = computed(() => $mediaPlayer.getState())
+  
+  // Subscribe to state changes from MediaPlayer
+  let subscription: Subscription | null = null
+  
+  try {
+    subscription = $mediaPlayer.subscribe((newState: PlayerState) => {
+      state.value = newState
+    })
+  } catch (error) {
+    console.error('useMediaPlayer: Failed to subscribe to MediaPlayer state:', error)
+  }
+  
+  // Cleanup subscription on component unmount
   onUnmounted(() => {
-    if (subscription.value) {
-      subscription.value.unsubscribe();
-      subscription.value = null;
+    if (subscription) {
+      subscription.unsubscribe()
+      subscription = null
     }
-  });
+  })
+  
+  // Computed properties for common state access
+  const isPlaying = computed(() => state.value.isPlaying)
+  const isLoading = computed(() => state.value.isLoading)
+  const currentTrack = computed(() => state.value.currentTrack)
+  const activeSource = computed(() => state.value.activeSource)
+  const currentTime = computed(() => state.value.currentTime)
+  const duration = computed(() => state.value.duration)
+  const volume = computed(() => state.value.volume)
+  const isMuted = computed(() => state.value.isMuted)
+  const currentIndex = computed(() => state.value.currentIndex)
+  const queue = computed(() => state.value.queue)
+  const preferences = computed(() => state.value.preferences)
+  const playbackState = computed(() => state.value.playbackState)
+  const error = computed(() => state.value.error)
+  
+  // Computed helpers
+  const hasCurrentTrack = computed(() => !!currentTrack.value)
+  const isVideo = computed(() => activeSource.value?.mediaType === 'video')
+  const isAudio = computed(() => activeSource.value?.mediaType === 'audio')
+  const canGoNext = computed(() => currentIndex.value < queue.value.length - 1)
+  const canGoPrevious = computed(() => currentIndex.value > 0)
+  const hasError = computed(() => !!error.value)
+  const progress = computed(() => {
+    if (!duration.value) return 0
+    return currentTime.value / duration.value
+  })
+  
+  // Helper functions
+  const formatTime = (seconds: number): string => {
+    if (!seconds || isNaN(seconds)) return '0:00'
+    
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    const secs = Math.floor(seconds % 60)
+    
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+    } else {
+      return `${minutes}:${secs.toString().padStart(2, '0')}`
+    }
+  }
 
-  // Return reactive state and computed properties
+  const formattedCurrentTime = computed(() => formatTime(currentTime.value))
+  const formattedDuration = computed(() => formatTime(duration.value))
+
   return {
-    // Raw state
-    state,
+    // MediaPlayer instance
+    mediaPlayer: $mediaPlayer,
+    
+    // Reactive state (readonly to prevent direct mutations)
+    state: readonly(state),
     
     // Computed properties
     isPlaying,
     isLoading,
-    hasError,
+    currentTrack,
+    activeSource,
+    currentTime,
+    duration,
+    volume,
+    isMuted,
+    currentIndex,
+    queue,
+    preferences,
+    playbackState,
+    error,
+    
+    // Computed helpers
+    hasCurrentTrack,
     isVideo,
     isAudio,
-    hasCurrentTrack,
     canGoNext,
     canGoPrevious,
+    hasError,
     progress,
     formattedCurrentTime,
     formattedDuration,
     
     // Helper functions
-    formatTime,
-  };
+    formatTime
+  }
 }
+

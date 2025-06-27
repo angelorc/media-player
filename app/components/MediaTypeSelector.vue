@@ -1,54 +1,69 @@
-<script setup>
-import { computed } from 'vue';
-import { Button } from '@/components/ui/button';
-import { Video, Music } from 'lucide-vue-next';
+<script setup lang="ts">
+import { computed } from 'vue'
+import { toRefs } from 'vue'
+import { Button } from '@/components/ui/button'
+import { Video, Music } from 'lucide-vue-next'
+import type { MediaPlayer } from '~/lib/MediaPlayer'
 
-const props = defineProps({
-  mediaPlayer: {
-    type: Object,
-    required: true,
-  },
-});
+const { $mediaPlayer } = useNuxtApp()
 
-const { mediaPlayer } = toRefs(props);
+// // Define props with TypeScript
+// const props = defineProps<{
+//   mediaPlayer: MediaPlayer
+// }>()
 
-// Get current state and preferences from media player
-const currentState = computed(() => mediaPlayer.value?.getState?.() || {});
-const currentPreferences = computed(() => currentState.value.preferences || { mediaType: ['video', 'audio'] });
+// // Use toRefs to maintain reactivity
+// const { mediaPlayer } = toRefs(props)
+
+// Get reactive state from composable
+const { state } = useMediaPlayer()
+
+// Computed properties
+const currentPreferences = computed(() => state.value?.preferences || { mediaType: ['video', 'audio'] })
 
 // Determine current mode based on preferences order
 const isVideoMode = computed(() => {
-  const mediaTypes = currentPreferences.value.mediaType || ['video', 'audio'];
-  return mediaTypes[0] === 'video';
-});
+  const mediaTypes = currentPreferences.value.mediaType || ['video', 'audio']
+  return mediaTypes[0] === 'video'
+})
+
+// Get button text and icon
+const buttonText = computed(() => 
+  isVideoMode.value ? 'Switch to Audio' : 'Switch to Video'
+)
+
+const buttonIcon = computed(() => 
+  isVideoMode.value ? Music : Video
+)
 
 // Toggle between video and audio mode
 const toggleMediaType = () => {
-  const currentMediaTypes = currentPreferences.value.mediaType || ['video', 'audio'];
+  if (!$mediaPlayer) return
   
-  if (isVideoMode.value) {
-    // Switch to audio mode: audio first, then video
-    mediaPlayer.value.setPreferences({
-      mediaType: ['audio', 'video']
-    });
-    console.log('MediaTypeSelector: Switched to audio mode');
-  } else {
-    // Switch to video mode: video first, then audio
-    mediaPlayer.value.setPreferences({
-      mediaType: ['video', 'audio']
-    });
-    console.log('MediaTypeSelector: Switched to video mode');
+  try {
+    // const currentMediaTypes = currentPreferences.value.mediaType || ['video', 'audio']
+    
+    if (isVideoMode.value) {
+      // Switch to audio mode: audio first, then video
+      $mediaPlayer.setPreferences({
+        ...currentPreferences.value,
+        mediaType: ['audio', 'video'],
+        formats: [...(currentPreferences.value.formats || [])]
+      })
+      console.log('MediaTypeSelector: Switched to audio mode')
+    } else {
+      // Switch to video mode: video first, then audio
+      $mediaPlayer.setPreferences({
+        ...currentPreferences.value,
+        mediaType: ['video', 'audio'],
+        formats: Array.from(currentPreferences.value.formats || [])
+      })
+      console.log('MediaTypeSelector: Switched to video mode')
+    }
+  } catch (error) {
+    console.error('MediaTypeSelector: Error toggling media type:', error)
   }
-};
-
-// Get button text and icon
-const buttonText = computed(() => {
-  return isVideoMode.value ? 'Switch to Audio' : 'Switch to Video';
-});
-
-const buttonIcon = computed(() => {
-  return isVideoMode.value ? Music : Video;
-});
+}
 </script>
 
 <template>

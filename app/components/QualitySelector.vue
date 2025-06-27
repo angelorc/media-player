@@ -1,78 +1,115 @@
-<script setup>
-import { computed } from 'vue';
-import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Settings, Check } from 'lucide-vue-next';
+<script setup lang="ts">
+import { computed, watch } from 'vue'
+import { toRefs } from 'vue'
+import { Button } from '@/components/ui/button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Settings, Check } from 'lucide-vue-next'
+import type { MediaPlayer } from '~/lib/MediaPlayer'
 
-const props = defineProps({
-  mediaPlayer: {
-    type: Object,
-    required: true,
-  },
-});
+// Define props with TypeScript
+const props = defineProps<{
+  mediaPlayer: MediaPlayer
+}>()
 
-const { mediaPlayer } = toRefs(props);
+// Use toRefs to maintain reactivity
+const { mediaPlayer } = toRefs(props)
 
-// Get current state from media player
-const currentState = computed(() => mediaPlayer.value?.getState?.() || {});
-const currentTrack = computed(() => currentState.value.currentTrack);
-const activeSource = computed(() => currentState.value.activeSource);
-const pluginOptions = computed(() => currentState.value.pluginOptions || []);
-const currentPreferences = computed(() => currentState.value.preferences || { formats: [] });
+// Get reactive state from composable
+const { state, activeSource } = useMediaPlayer()
+
+// Computed properties for current state
+const currentTrack = computed(() => state.value?.currentTrack)
+const currentPreferences = computed(() => state.value?.preferences || { formats: [] })
+const pluginOptions = computed(() => state.value?.pluginOptions || [])
 
 // Get available sources for current track
 const availableSources = computed(() => {
-  if (!currentTrack.value?.sources) return [];
-  return currentTrack.value.sources;
-});
+  if (!currentTrack.value?.sources) return []
+  return currentTrack.value.sources
+})
 
-const hasHlsLevels = computed(() => activeSource.value?.format === 'hls' && pluginOptions.value.length > 0);
+const hasHlsLevels = computed(() => 
+  activeSource.value?.format === 'hls' && pluginOptions.value.length > 0
+)
 
-const handleSourceChange = (source) => {
-  console.log('QualitySelector: User manually selected source:', source);
+// Function to handle source selection with proper preference persistence
+const handleSourceChange = (source: any) => {
+  if (!mediaPlayer.value) return
   
-  // Update format preferences to prioritize the selected format
-  const selectedFormat = source.format;
-  const currentFormats = currentPreferences.value.formats || [];
-  
-  // Move the selected format to the front of the preferences list
-  const newFormats = [selectedFormat, ...currentFormats.filter(f => f !== selectedFormat)];
-  
-  // Update preferences in the MediaPlayer core
-  const newPreferences = {
-    ...currentPreferences.value,
-    formats: newFormats
-  };
-  
-  console.log('QualitySelector: Updating format preferences for persistence:', newFormats);
-  mediaPlayer.value.setPreferences(newPreferences);
-  
-  // Change to the selected source
-  mediaPlayer.value.setActiveSource(source);
-};
+  try {
+    console.log('QualitySelector: User manually selected source:', source)
+    
+    // Get current track ID to ensure we're working with the right track
+    const currentTrackId = currentTrack.value?.id
+    if (!currentTrackId) {
+      console.error('QualitySelector: No current track ID available')
+      return
+    }
+    
+    // Update format preferences to prioritize the selected format
+    const selectedFormat = source.format
+    const currentFormats = currentPreferences.value.formats || []
+    
+    // Move the selected format to the front of the preferences list
+    const newFormats = [selectedFormat, ...currentFormats.filter(f => f !== selectedFormat)]
+    
+    // Update preferences in the MediaPlayer core
+    const newPreferences = {
+      ...currentPreferences.value,
+      formats: newFormats
+    }
+    
+    console.log('QualitySelector: Updating format preferences for persistence:', newFormats)
+    mediaPlayer.value.setPreferences(newPreferences)
+    
+    // Important: Use setActiveSource instead of selectSource to avoid track confusion
+    // This ensures we change the source for the current track without changing tracks
+    mediaPlayer.value.setActiveSource(source)
+    
+    console.log('QualitySelector: Successfully changed source for track:', currentTrackId)
+    
+  } catch (error) {
+    console.error('QualitySelector: Error selecting source:', error)
+  }
+}
 
-const handlePluginOptionChange = (optionId) => {
-  console.log('QualitySelector: Changing plugin option:', optionId);
-  mediaPlayer.value.setPluginOption(optionId);
-};
+const handlePluginOptionChange = (optionId: string) => {
+  if (!mediaPlayer.value) return
+  
+  try {
+    console.log('QualitySelector: Changing plugin option:', optionId)
+    mediaPlayer.value.setPluginOption(optionId)
+  } catch (error) {
+    console.error('QualitySelector: Error changing plugin option:', error)
+  }
+}
 
 // Format the quality label for display
-const formatQualityLabel = (source) => {
-  return source.quality || `${source.format.toUpperCase()} (${source.mediaType})`;
-};
+const formatQualityLabel = (source: any) => {
+  const format = source.format?.toUpperCase() || 'Unknown'
+  const quality = source.quality || ''
+  const mediaType = source.mediaType === 'video' ? '📹' : '🎵'
+  
+  return `${mediaType} ${format}${quality ? ` ${quality}` : ''}`
+}
+
+// Watch for changes in mediaPlayer to ensure we have the latest instance
+watch(mediaPlayer, (newMediaPlayer) => {
+  if (newMediaPlayer) {
+    console.log('QualitySelector: MediaPlayer instance updated')
+  }
+}, { immediate: true })
 </script>
 
 <template>
   <DropdownMenu>
     <DropdownMenuTrigger as-child>
-      <Button variant="ghost" size="icon" title="Quality & Source">
+      <Button 
+        variant="ghost" 
+        size="icon" 
+        title="Quality & Source"
+        :disabled="!availableSources.length"
+      >
         <Settings class="h-5 w-5" />
       </Button>
     </DropdownMenuTrigger>
@@ -80,12 +117,17 @@ const formatQualityLabel = (source) => {
       <DropdownMenuLabel>Source</DropdownMenuLabel>
       <DropdownMenuItem 
         v-for="source in availableSources" 
-        :key="source.src" 
+        :key="`${source.format}-${source.quality}-${source.src}`" 
         @click="handleSourceChange(source)"
+        class="cursor-pointer"
       >
         <span class="flex-1">{{ formatQualityLabel(source) }}</span>
-        <Check v-if="activeSource?.src === source.src" class="h-4 w-4 ml-2" />
+        <Check 
+          v-if="activeSource?.src === source.src" 
+          class="h-4 w-4 ml-2 text-primary" 
+        />
       </DropdownMenuItem>
+      
       <template v-if="hasHlsLevels">
         <DropdownMenuSeparator />
         <DropdownMenuLabel>Quality (HLS)</DropdownMenuLabel>
@@ -93,9 +135,13 @@ const formatQualityLabel = (source) => {
           v-for="option in pluginOptions" 
           :key="option.id" 
           @click="handlePluginOptionChange(option.id)"
+          class="cursor-pointer"
         >
           <span class="flex-1">{{ option.label }}</span>
-          <Check v-if="currentState.activePluginOptionId === option.id" class="h-4 w-4 ml-2" />
+          <Check 
+            v-if="state?.activePluginOptionId === option.id" 
+            class="h-4 w-4 ml-2 text-primary" 
+          />
         </DropdownMenuItem>
       </template>
       

@@ -1,6 +1,8 @@
 <template>
   <div>
     <NuxtRouteAnnouncer />
-    <PlayerProvider />
+    <ClientOnly>
+      <PlayerProvider />
+    </ClientOnly>
   </div>
 </template>
