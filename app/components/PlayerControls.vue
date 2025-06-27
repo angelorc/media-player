@@ -1,5 +1,5 @@
 <template>
-  <div v-if="state && state.currentTrack" class="fixed bottom-0 left-0 right-0 z-50">
+  <div v-if="hasCurrentTrack" class="fixed bottom-0 left-0 right-0 z-50">
     <div class="relative w-full border-t bg-background/80 backdrop-blur-lg supports-[backdrop-filter]:bg-background/60">
       <!-- Progress Bar -->
       <ProgressBar
@@ -34,13 +34,13 @@
           <Button
             variant="default"
             size="icon"
-            @click="() => (state.isPlaying ? mediaPlayer.pause() : mediaPlayer.play())"
+            @click="() => (isPlaying ? mediaPlayer.pause() : mediaPlayer.play())"
             :disabled="state.playbackState === 'ERROR'"
             class="w-10 h-10 rounded-full"
-            :title="state.isPlaying ? 'Pause' : 'Play'"
+            :title="isPlaying ? 'Pause' : 'Play'"
           >
-            <Loader2 v-if="state.isLoading" class="h-5 w-5 animate-spin" />
-            <Pause v-else-if="state.isPlaying" class="h-5 w-5" />
+            <Loader2 v-if="isLoading" class="h-5 w-5 animate-spin" />
+            <Pause v-else-if="isPlaying" class="h-5 w-5" />
             <Play v-else class="h-5 w-5" />
           </Button>
           <Button variant="ghost" size="icon" @click="mediaPlayer.next()" :disabled="!canGoNext" title="Next">
@@ -56,6 +56,11 @@
             :is-muted="state.isMuted"
             @volume-change="(volume) => mediaPlayer.setVolume(volume)"
             @toggle-mute="mediaPlayer.toggleMute"
+          />
+          <!-- Media Type Selector -->
+          <MediaTypeSelector 
+            :media-player="mediaPlayer"
+            @preference-changed="handlePreferenceChanged"
           />
           <!-- Video Display Controls (only for video content and when not in normal mode) -->
           <VideoDisplay
@@ -76,7 +81,7 @@
       </div>
       
       <!-- Error Display -->
-      <div v-if="state.error" class="text-xs text-destructive bg-destructive/10 p-2 mx-4 mb-2 rounded-md border border-destructive/20">
+      <div v-if="hasError" class="text-xs text-destructive bg-destructive/10 p-2 mx-4 mb-2 rounded-md border border-destructive/20">
         Error: {{ state.error }}
       </div>
     </div>
@@ -93,6 +98,7 @@ import VideoThumbnail from './VideoThumbnail.vue';
 import ProgressBar from './ProgressBar.vue';
 import VolumeControl from './VolumeControl.vue';
 import QualitySelector from './QualitySelector.vue';
+import MediaTypeSelector from './MediaTypeSelector.vue';
 import TrackInfo from './TrackInfo.vue';
 import TimeDisplay from './TimeDisplay.vue';
 
@@ -104,12 +110,17 @@ const props = defineProps({
 });
 
 const mediaPlayerRef = ref(props.mediaPlayer);
-const state = useMediaPlayer(mediaPlayerRef);
+const { 
+  state, 
+  isPlaying, 
+  isLoading, 
+  hasError, 
+  isVideo, 
+  hasCurrentTrack, 
+  canGoNext, 
+  canGoPrevious 
+} = useMediaPlayer(mediaPlayerRef);
 const displayMode = ref('normal');
-
-const isVideo = computed(() => state.value?.activeSource?.mediaType === 'video');
-const canGoNext = computed(() => (state.value ? state.value.currentIndex < state.value.queue.length - 1 : false));
-const canGoPrevious = computed(() => (state.value ? state.value.currentIndex > 0 : false));
 
 const handleToggleFullscreen = async () => {
   const videoElement = props.mediaPlayer.getActiveHTMLElement();
@@ -143,6 +154,12 @@ const handleTogglePip = async () => {
 
 const onFullscreenChange = () => (displayMode.value = document.fullscreenElement ? 'fullscreen' : 'normal');
 const onPipChange = () => (displayMode.value = document.pictureInPictureElement ? 'pip' : 'normal');
+
+const handlePreferenceChanged = (newMode) => {
+  console.log('Media type preference changed to:', newMode);
+  // The MediaTypeSelector component already handles the preference update
+  // We could add additional logic here if needed
+};
 
 const setupEventListeners = () => {
   document.addEventListener('fullscreenchange', onFullscreenChange);

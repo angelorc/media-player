@@ -1,4 +1,5 @@
 <script setup>
+import { ref, onMounted } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Maximize, Minimize, PictureInPicture2 } from 'lucide-vue-next';
 

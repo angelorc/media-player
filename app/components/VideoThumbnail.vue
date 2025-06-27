@@ -215,11 +215,6 @@ onUnmounted(() => {
         </svg>
       </div>
     </div>
-
-    <!-- PiP indicator -->
-    <div class="absolute top-1 right-1 z-20">
-      <div class="w-3 h-3 bg-blue-500 rounded-full opacity-60"></div>
-    </div>
   </div>
 </template>
 

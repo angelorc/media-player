@@ -1,4 +1,5 @@
 <script setup>
+import { computed } from 'vue';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -7,7 +8,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'; // Assuming Vue components
+} from '@/components/ui/dropdown-menu';
 import { Settings, Check } from 'lucide-vue-next';
 
 const props = defineProps({
