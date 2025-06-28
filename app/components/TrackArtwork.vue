@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Music } from 'lucide-vue-next'
 import { cn } from '~/lib/utils'
 
 interface Props {

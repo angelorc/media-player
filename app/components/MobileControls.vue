@@ -7,7 +7,7 @@ const isMobileExpanded = defineModel<boolean>();
 <template>
   <div
     class="fixed bottom-0 left-0 right-0 z-50 h-16 bg-card border-t border-border/40"
-    @click="isMobileExpanded = true"
+    @click.prevent="isMobileExpanded = true"
   >
     <ProgressBar class="absolute -top-1 left-0 right-0 h-1" @click.stop />
     <div class="flex items-center h-full px-3 gap-3">

@@ -20,7 +20,9 @@ const hasHlsLevels = computed(() =>
   activeSource.value?.format === 'hls' && pluginOptions.value.length > 0
 )
 
-const handleSourceChange = (source: any) => {
+type Source = typeof availableSources.value[0]
+
+const handleSourceChange = (source: Source) => {
   if (!$mediaPlayer) return
   
   try {
@@ -39,7 +41,8 @@ const handleSourceChange = (source: any) => {
     
     const newPreferences = {
       ...currentPreferences.value,
-      formats: newFormats
+      formats: newFormats,
+      mediaType: currentPreferences.value.mediaType ? [...currentPreferences.value.mediaType] : undefined
     }
     
     console.log('QualitySelector: Updating format preferences for persistence:', newFormats)
@@ -65,7 +68,7 @@ const handlePluginOptionChange = (optionId: string) => {
   }
 }
 
-const formatQualityLabel = (source: any) => {
+const formatQualityLabel = (source: Source) => {
   const format = source.format?.toUpperCase() || 'Unknown'
   const quality = source.quality || ''
   const mediaType = source.mediaType === 'video' ? '📹' : '🎵'
@@ -73,11 +76,11 @@ const formatQualityLabel = (source: any) => {
   return `${mediaType} ${format}${quality ? ` ${quality}` : ''}`
 }
 
-watch($mediaPlayer, (newMediaPlayer) => {
-  if (newMediaPlayer) {
-    console.log('QualitySelector: MediaPlayer instance updated')
-  }
-}, { immediate: true })
+// watch($mediaPlayer, (newMediaPlayer) => {
+//   if (newMediaPlayer) {
+//     console.log('QualitySelector: MediaPlayer instance updated')
+//   }
+// }, { immediate: true })
 </script>
 
 <template>
