@@ -1,30 +1,27 @@
-<script setup>
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
+<script setup lang="ts">
+import { cn } from '~/lib/utils'
 
-const props = defineProps({
-  mediaPlayer: {
-    type: Object,
-    required: true,
-  },
-  displayMode: {
-    type: String,
-    validator: (value) => ['normal', 'pip', 'fullscreen'].includes(value),
-    required: true,
-  },
-});
+interface Props {
+  displayMode: 'normal' | 'pip' | 'fullscreen';
+  class?: string;
+}
+
+const { $mediaPlayer } = useNuxtApp();
+const props = defineProps<Props>();
+const { displayMode } = toRefs(props);
 
 const emit = defineEmits(['togglePip', 'toggleFullscreen']);
 
 const thumbnailRef = ref(null);
 const videoMoved = ref(false);
 
-const state = computed(() => props.mediaPlayer?.getState?.() || null);
+const state = computed(() => $mediaPlayer?.getState?.() || null);
 const isVideo = computed(() => state.value?.activeSource?.mediaType === 'video');
 
 const handleThumbnailClick = () => {
-  if (props.displayMode === 'normal') {
+  if (displayMode.value === 'normal') {
     emit('togglePip');
-  } else if (props.displayMode === 'pip') {
+  } else if (displayMode.value === 'pip') {
     emit('toggleFullscreen');
   }
 };
@@ -34,13 +31,13 @@ const handleDoubleClick = () => {
 };
 
 const moveVideoToThumbnail = async () => {
-  if (!isVideo.value || !thumbnailRef.value || props.displayMode !== 'normal') {
+  if (!isVideo.value || !thumbnailRef.value || displayMode.value !== 'normal') {
     return;
   }
   
   await nextTick();
   
-  const videoElement = props.mediaPlayer.getActiveHTMLElement();
+  const videoElement = $mediaPlayer.getActiveHTMLElement();
   if (!videoElement || !(videoElement instanceof HTMLVideoElement)) {
     return;
   }
@@ -90,7 +87,7 @@ const moveVideoToThumbnail = async () => {
 const restoreVideoPosition = () => {
   if (!videoMoved.value) return;
   
-  const videoElement = props.mediaPlayer.getActiveHTMLElement();
+  const videoElement = $mediaPlayer.getActiveHTMLElement();
   if (!videoElement || !(videoElement instanceof HTMLVideoElement)) {
     return;
   }
@@ -121,7 +118,7 @@ const restoreVideoPosition = () => {
 };
 
 const updateVideoPosition = () => {
-  if (props.displayMode === 'normal' && isVideo.value) {
+  if (displayMode.value === 'normal' && isVideo.value) {
     moveVideoToThumbnail();
   } else if (videoMoved.value) {
     restoreVideoPosition();
@@ -129,7 +126,7 @@ const updateVideoPosition = () => {
 };
 
 // Watch for changes in display mode, video source, or video availability
-watch([() => props.displayMode, isVideo, () => state.value?.activeSource?.src], () => {
+watch([() => displayMode, isVideo, () => state.value?.activeSource?.src], () => {
   // Use nextTick to ensure the new video element is ready
   nextTick(() => {
     updateVideoPosition();
@@ -137,7 +134,7 @@ watch([() => props.displayMode, isVideo, () => state.value?.activeSource?.src], 
 }, { immediate: false });
 
 // Watch for changes in the video element itself
-watch(() => props.mediaPlayer.getActiveHTMLElement(), () => {
+watch(() => $mediaPlayer.getActiveHTMLElement(), () => {
   // Reset the moved state when a new video element is created
   videoMoved.value = false;
   nextTick(() => {
@@ -165,8 +162,8 @@ onMounted(() => {
   
   // Set up a periodic check to ensure video stays in thumbnail
   checkInterval = setInterval(() => {
-    if (props.displayMode === 'normal' && isVideo.value) {
-      const videoElement = props.mediaPlayer.getActiveHTMLElement();
+    if (displayMode.value === 'normal' && isVideo.value) {
+      const videoElement = $mediaPlayer.getActiveHTMLElement();
       if (videoElement && videoElement.parentNode !== thumbnailRef.value) {
         console.log('Video element found outside thumbnail, moving it back');
         updateVideoPosition();
@@ -191,20 +188,17 @@ onUnmounted(() => {
   <div 
     v-if="isVideo && displayMode === 'normal'" 
     ref="thumbnailRef"
-    class="relative w-20 h-15 bg-black rounded-lg overflow-hidden cursor-pointer hover:opacity-80 transition-opacity border border-gray-600"
+    :class="cn('relative w-20 h-15 bg-black rounded-lg overflow-hidden cursor-pointer hover:opacity-80 transition-opacity border border-gray-600', props.class)"
     @click="handleThumbnailClick"
     @dblclick="handleDoubleClick"
-    title="Click for Picture-in-Picture, Double-click for Fullscreen"
   >
-    <!-- Loading placeholder if video element is not yet available -->
     <div 
-      v-if="!mediaPlayer.getActiveHTMLElement() || state?.isLoading" 
+      v-if="!$mediaPlayer.getActiveHTMLElement() || state?.isLoading" 
       class="absolute inset-0 bg-gray-800 flex items-center justify-center"
     >
       <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
     </div>
     
-    <!-- Overlay with play icon when paused -->
     <div 
       v-if="state && !state.isPlaying && !state.isLoading"
       class="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center pointer-events-none z-10"

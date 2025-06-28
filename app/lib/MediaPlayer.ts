@@ -13,6 +13,7 @@ import type {
   PluginLoadOptions,
   PluginMediaControlHandlers,
   PluginSelectableOption,
+  PlayerStore,
 } from './types';
 
 export const DEFAULT_PREFERENCES: PlayerPreferences = {
@@ -21,7 +22,7 @@ export const DEFAULT_PREFERENCES: PlayerPreferences = {
   autoplay: false,
 };
 
-const initialPlayerStateDefinition: Readonly<PlayerState> = {
+const initialPlayerState: Readonly<PlayerState> = {
   playbackState: 'IDLE',
   isLoading: false,
   isPlaying: false,
@@ -45,7 +46,7 @@ export class MediaPlayer {
   private _activePluginHandlers: PluginMediaControlHandlers | null = null;
   private _plugins: PlayerPlugin[];
 
-  private store: StoreApi<PlayerState>;
+  private store: PlayerStore;
   private _preferences: PlayerPreferences = DEFAULT_PREFERENCES;
   private _preMuteVolume: number;
 
@@ -53,7 +54,7 @@ export class MediaPlayer {
 
   constructor(plugins: PlayerPlugin[]) {
     this._plugins = plugins;
-    this.store = createStore<PlayerState>(() => ({ ...initialPlayerStateDefinition }));
+    this.store = createStore<PlayerState>(() => ({ ...initialPlayerState }));
     
     const initialState = this.store.getState();
     this._preMuteVolume = initialState.isMuted ? 0.5 : (initialState.volume > 0 ? initialState.volume : 0.5);

@@ -2,7 +2,7 @@
   <div>
     <NuxtRouteAnnouncer />
     <ClientOnly>
-      <PlayerProvider />
+      <MediaPlayer />
     </ClientOnly>
   </div>
 </template>

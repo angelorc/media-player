@@ -1,5 +1,6 @@
 
 import type { Level as HlsJsLevel } from 'hls.js';
+import type { StoreApi } from 'zustand/vanilla';
 
 export interface MediaMetadata {
   title?: string;
@@ -118,3 +119,5 @@ export interface PlayerPlugin {
   onTrackUnload(): void; // Called when the plugin is about to be replaced or track stops
   destroy(): void;
 }
+
+export type PlayerStore = StoreApi<PlayerState>

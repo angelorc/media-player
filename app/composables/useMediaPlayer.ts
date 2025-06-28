@@ -1,23 +1,15 @@
 import { ref, computed, readonly, onUnmounted } from 'vue'
 import type { PlayerState, Subscription } from '~/lib/types'
 
-/**
- * Composable for accessing the global MediaPlayer instance and reactive state
- * Uses the MediaPlayer instance provided by the Nuxt plugin
- */
 export function useMediaPlayer() {
-  // Get MediaPlayer instance from Nuxt plugin
   const { $mediaPlayer } = useNuxtApp()
   
   if (!$mediaPlayer) {
     throw new Error('MediaPlayer plugin not found. Make sure the plugin is properly configured.')
   }
 
-  // Reactive state from MediaPlayer
-  const state = ref<PlayerState>($mediaPlayer.getState())
-  // const state = computed(() => $mediaPlayer.getState())
+  const state = useState<PlayerState>(() => $mediaPlayer.getState())
   
-  // Subscribe to state changes from MediaPlayer
   let subscription: Subscription | null = null
   
   try {
@@ -28,7 +20,6 @@ export function useMediaPlayer() {
     console.error('useMediaPlayer: Failed to subscribe to MediaPlayer state:', error)
   }
   
-  // Cleanup subscription on component unmount
   onUnmounted(() => {
     if (subscription) {
       subscription.unsubscribe()
@@ -78,14 +69,50 @@ export function useMediaPlayer() {
     }
   }
 
+  const isSeeking = useState(() => false)
+  const scrubTime = useState(() => 0)
+
+  watch(currentTime, (newPlayerTime) => {
+    if (isSeeking.value) {
+      if (Math.abs(newPlayerTime - scrubTime.value) < 0.5) {
+        isSeeking.value = false
+      }
+    }
+  })
+
+  const sliderPosition = computed<number[]>({
+    get() {
+      const timeSource = isSeeking.value ? scrubTime.value : currentTime.value
+      if (!duration.value || isNaN(duration.value) || duration.value === 0) {
+        return [0]
+      }
+      return [(timeSource / duration.value) * 100]
+    },
+    set(value: number[]) {
+      if (!duration.value) return
+      isSeeking.value = true
+      scrubTime.value = ((value[0] || 0) / 100) * duration.value
+    }
+  })
+
+  const onSeekCommit = (value: number[]) => {
+    if (!duration.value) return
+    const finalTime = ((value[0] || 0) / 100) * duration.value
+    $mediaPlayer.seek(finalTime)
+  }
+
+  const displayTime = computed<number>(() => {
+    if (isSeeking.value) {
+      return scrubTime.value
+    }
+    return currentTime.value
+  })
+
   const formattedCurrentTime = computed(() => formatTime(currentTime.value))
   const formattedDuration = computed(() => formatTime(duration.value))
+  const formattedDisplayTime = computed(() => formatTime(displayTime.value))
 
   return {
-    // MediaPlayer instance
-    mediaPlayer: $mediaPlayer,
-    
-    // Reactive state (readonly to prevent direct mutations)
     state: readonly(state),
     
     // Computed properties
@@ -113,9 +140,16 @@ export function useMediaPlayer() {
     progress,
     formattedCurrentTime,
     formattedDuration,
+    formattedDisplayTime,
     
     // Helper functions
-    formatTime
+    formatTime,
+
+    isSeeking,
+    scrubTime,
+    sliderPosition,
+    displayTime,
+    onSeekCommit,
   }
 }
 

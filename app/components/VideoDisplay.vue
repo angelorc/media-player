@@ -1,16 +1,12 @@
-<script setup>
-import { ref, onMounted } from 'vue';
+<script setup lang="ts">
 import { Button } from '@/components/ui/button';
 import { Maximize, Minimize, PictureInPicture2 } from 'lucide-vue-next';
 
-const props = defineProps({
-  displayMode: {
-    type: String,
-    validator: (value) => ['normal', 'pip', 'fullscreen'].includes(value),
-    required: true,
-  },
-});
+interface Props {
+  displayMode: 'normal' | 'pip' | 'fullscreen';
+}
 
+const props = defineProps<Props>();
 const { displayMode } = toRefs(props);
 
 const emit = defineEmits(['togglePip', 'toggleFullscreen']);

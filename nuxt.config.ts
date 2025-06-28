@@ -8,6 +8,10 @@ export default defineNuxtConfig({
   devtools: { enabled: false },
   modules: ['@nuxt/eslint', '@nuxt/icon', 'shadcn-nuxt'],
   css: ['~/assets/css/tailwind.css'],
+  shadcn: {
+    prefix: '',
+    componentDir: './app/components/ui'
+  },
   vite: {
     plugins: [
       tailwindcss(),
