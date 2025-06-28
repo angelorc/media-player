@@ -1,6 +1,5 @@
 
 import { createStore } from 'zustand/vanilla';
-import type { StoreApi } from 'zustand/vanilla';
 import type {
   PlayerState,
   StateSubscriber,
@@ -52,15 +51,19 @@ export class MediaPlayer {
 
   private _containerEl: HTMLElement | null = null;
 
+  private _lastSyncedMediaSessionTrackId: string | null = null;
+
   constructor(plugins: PlayerPlugin[]) {
     this._plugins = plugins;
     this.store = createStore<PlayerState>(() => ({ ...initialPlayerState }));
-    
+
     const initialState = this.store.getState();
     this._preMuteVolume = initialState.isMuted ? 0.5 : (initialState.volume > 0 ? initialState.volume : 0.5);
     if (this._preferences !== initialState.preferences) {
-        this.store.setState({ preferences: this._preferences });
+      this.store.setState({ preferences: this._preferences });
     }
+
+    this._initMediaSession();
   }
 
   public subscribe(callback: StateSubscriber): Subscription {
@@ -82,16 +85,16 @@ export class MediaPlayer {
     }
 
     if (newState.volume !== undefined || newState.isMuted !== undefined) {
-        const targetVolume = newState.volume ?? currentState.volume;
-        const targetMuted = newState.isMuted ?? currentState.isMuted;
+      const targetVolume = newState.volume ?? currentState.volume;
+      const targetMuted = newState.isMuted ?? currentState.isMuted;
 
-        if (newState.isMuted === true && currentState.isMuted === false) {
-            this._preMuteVolume = currentState.volume > 0 ? currentState.volume : 0.5;
-        } else if (newState.volume !== undefined && targetVolume > 0 && (newState.isMuted === false || (newState.isMuted === undefined && !currentState.isMuted) )) {
-             this._preMuteVolume = targetVolume;
-        }
+      if (newState.isMuted === true && currentState.isMuted === false) {
+        this._preMuteVolume = currentState.volume > 0 ? currentState.volume : 0.5;
+      } else if (newState.volume !== undefined && targetVolume > 0 && (newState.isMuted === false || (newState.isMuted === undefined && !currentState.isMuted))) {
+        this._preMuteVolume = targetVolume;
+      }
     }
-    
+
     this.store.setState(newState);
   };
 
@@ -140,7 +143,7 @@ export class MediaPlayer {
 
   public loadQueue = (tracks: MediaTrack[], containerElement: HTMLElement, startIndex = 0, playImmediately?: boolean): void => {
     this._containerEl = containerElement;
-    this._unloadActivePlugin(); 
+    this._unloadActivePlugin();
 
     this._updateState({
       queue: tracks,
@@ -174,7 +177,7 @@ export class MediaPlayer {
     }
     this._activePlugin = null;
     this._activePluginHandlers = null;
-    
+
     const currentState = this.store.getState();
     if (currentState.pluginOptions?.length || currentState.activePluginOptionId) {
       this._updateState({ pluginOptions: [], activePluginOptionId: null });
@@ -208,7 +211,7 @@ export class MediaPlayer {
       this._updateState({ error: errorMsg, playbackState: 'ERROR', isLoading: false, currentTrack: track, currentIndex: index, activeSource: targetSource, activePluginName: null });
       return;
     }
-    
+
     const needsPluginChange =
       this._activePlugin !== targetPlugin ||
       currentState.activeSource?.src !== targetSource.src ||
@@ -217,18 +220,18 @@ export class MediaPlayer {
     if (needsPluginChange) {
       await this._unloadActivePlugin();
     }
-    
+
     const currentDuration = track.duration || currentState.duration || 0;
 
     this._updateState({
-      isLoading: true, 
+      isLoading: true,
       playbackState: 'LOADING',
       currentIndex: index,
       currentTrack: track,
       activeSource: targetSource,
       activePluginName: targetPlugin.name,
       duration: needsPluginChange ? 0 : currentDuration,
-      currentTime: needsPluginChange ? 0 : currentState.currentTime, 
+      currentTime: needsPluginChange ? 0 : currentState.currentTime,
       error: null,
       ...(needsPluginChange && { pluginOptions: [], activePluginOptionId: null }),
     });
@@ -240,7 +243,7 @@ export class MediaPlayer {
       onLoading: () => this._updateState({ isLoading: true, playbackState: 'LOADING' }),
       onLoadedMetadata: (metadata) => this._updateState({ duration: metadata.duration, isLoading: false }),
       onCanPlay: () => {
-        this._updateState({ isLoading: false }); 
+        this._updateState({ isLoading: false });
         const latestState = this.store.getState();
         if (playImmediately && (latestState.playbackState === 'LOADING' || latestState.playbackState === 'PAUSED')) {
           this.play().catch(e => console.warn("Autoplay after onCanPlay failed:", e));
@@ -249,7 +252,7 @@ export class MediaPlayer {
         }
       },
       onPlaying: () => this._updateState({ isPlaying: true, isLoading: false, playbackState: 'PLAYING', error: null }),
-      onPaused: () => this._updateState({ isPlaying: false, playbackState: 'PAUSED' }), 
+      onPaused: () => this._updateState({ isPlaying: false, playbackState: 'PAUSED' }),
       onEnded: () => {
         const endedState = this.store.getState();
         this._updateState({ isPlaying: false, playbackState: 'ENDED', currentTime: endedState.duration });
@@ -264,7 +267,7 @@ export class MediaPlayer {
       onStalled: () => this._updateState({ isLoading: true, playbackState: 'STALLED' }),
       onWaiting: () => this._updateState({ isLoading: true, playbackState: 'LOADING' }),
       onVolumeChange: (data) => this._updateState({ volume: data.volume, isMuted: data.isMuted }),
-      
+
       onPluginOptionsAvailable: (options: PluginSelectableOption[]) => {
         this._updateState({ pluginOptions: options });
       },
@@ -286,9 +289,9 @@ export class MediaPlayer {
         const handlers = await this._activePlugin.load(targetSource, pluginCallbacks, loadOptions);
         this._activePluginHandlers = handlers || null;
       } else {
-         if (playImmediately) this.play().catch(e => console.warn("Re-play after no-op load failed:", e));
+        if (playImmediately) this.play().catch(e => console.warn("Re-play after no-op load failed:", e));
       }
-      
+
       const postLoadState = this.store.getState();
       if (postLoadState.playbackState === 'LOADING' && !postLoadState.isPlaying && !postLoadState.error) {
         this._updateState({ playbackState: 'PAUSED', isLoading: false });
@@ -302,32 +305,32 @@ export class MediaPlayer {
   };
 
   public async setActiveSource(newSource: MediaSource, mediaElement?: HTMLVideoElement | HTMLAudioElement): Promise<void> {
-    const {currentTrack, currentIndex, activeSource, isPlaying} = this.store.getState();
+    const { currentTrack, currentIndex, activeSource, isPlaying } = this.store.getState();
     if (!currentTrack || currentIndex === -1) {
-        console.warn("MediaPlayer: Cannot set source, no current track.");
-        return;
+      console.warn("MediaPlayer: Cannot set source, no current track.");
+      return;
     }
     if (activeSource?.src === newSource.src) {
-        console.log("MediaPlayer: Selected source is already active.");
-        return;
+      console.log("MediaPlayer: Selected source is already active.");
+      return;
     }
     await this._loadTrack(currentIndex, isPlaying, newSource, mediaElement);
   }
 
   public async setPluginOption(optionId: string): Promise<void> {
     if (!this._activePluginHandlers?.setPluginOption) {
-        console.warn("MediaPlayer: Active plugin does not support setting options.");
-        return;
+      console.warn("MediaPlayer: Active plugin does not support setting options.");
+      return;
     }
     if (this.store.getState().activePluginOptionId === optionId) {
-        console.log("MediaPlayer: Plugin option is already active.");
-        return;
+      console.log("MediaPlayer: Plugin option is already active.");
+      return;
     }
     try {
-        await this._activePluginHandlers.setPluginOption(optionId);
+      await this._activePluginHandlers.setPluginOption(optionId);
     } catch (error) {
-        console.error("MediaPlayer: Error setting plugin option:", error);
-        this._updateState({ error: (error as Error).message, isLoading: false }); 
+      console.error("MediaPlayer: Error setting plugin option:", error);
+      this._updateState({ error: (error as Error).message, isLoading: false });
     }
   }
 
@@ -413,9 +416,9 @@ export class MediaPlayer {
   public jumpTo = (index: number): void => {
     const { currentIndex, queue, isPlaying, activeSource } = this.store.getState();
     if (index >= 0 && index < queue.length && this._containerEl) {
-      if (index === currentIndex && activeSource) { 
-          this.seek(0);
-          if(!isPlaying) this.play().catch(e => console.warn("Re-play on jumpTo same track failed:", e));
+      if (index === currentIndex && activeSource) {
+        this.seek(0);
+        if (!isPlaying) this.play().catch(e => console.warn("Re-play on jumpTo same track failed:", e));
       } else {
         const autoplayPref = this.store.getState().preferences.autoplay;
         this._loadTrack(index, isPlaying || (autoplayPref ?? false));
@@ -441,9 +444,9 @@ export class MediaPlayer {
     const currentState = this.store.getState();
 
     if (newMuted && !currentState.isMuted) {
-        this._preMuteVolume = currentState.volume > 0 ? currentState.volume : 0.5;
+      this._preMuteVolume = currentState.volume > 0 ? currentState.volume : 0.5;
     } else if (!newMuted && newVolume > 0) {
-        this._preMuteVolume = newVolume;
+      this._preMuteVolume = newVolume;
     }
 
     if (this._activePluginHandlers?.setVolume) {
@@ -473,6 +476,129 @@ export class MediaPlayer {
 
   public getActiveHTMLElement = (): HTMLElement | null => {
     return this._activePluginHandlers?.getHTMLElement?.() || null;
+  }
+
+  private _initMediaSession(): void {
+    if (!('mediaSession' in navigator)) {
+      return;
+    }
+
+    this.subscribe(this._syncMediaSessionState.bind(this));
+
+    try {
+      navigator.mediaSession.setActionHandler('play', () => { this.play().catch(e => console.warn("MediaSession: play() action failed.", e)); });
+      navigator.mediaSession.setActionHandler('pause', () => this.pause());
+      navigator.mediaSession.setActionHandler('stop', () => { this.stop().catch(e => console.warn("MediaSession: stop() action failed.", e)); });
+
+      navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+        const seekOffset = details.seekOffset || 10;
+        this.seek(this.getState().currentTime - seekOffset);
+      });
+
+      navigator.mediaSession.setActionHandler('seekforward', (details) => {
+        const seekOffset = details.seekOffset || 10;
+        this.seek(this.getState().currentTime + seekOffset);
+      });
+
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+        if (details.seekTime !== null && details.seekTime !== undefined && !details.fastSeek) {
+          this.seek(details.seekTime);
+        }
+      });
+    } catch (error) {
+      console.warn('MediaPlayer: Could not set some media session action handlers.', error);
+    }
+  }
+
+  private _syncMediaSessionState(state: PlayerState): void {
+    if (!('mediaSession' in navigator) || !window.MediaMetadata) {
+      return;
+    }
+
+    const { currentTrack, playbackState, duration, currentTime, queue, currentIndex } = state;
+
+    if (currentTrack && currentTrack.id !== this._lastSyncedMediaSessionTrackId) {
+      const { title, artist, album, artwork } = currentTrack.metadata || {};
+      const artworkArray = artwork ? [{ src: artwork, sizes: '512x512', type: 'image/jpeg' }] : [];
+
+      try {
+        navigator.mediaSession.metadata = new window.MediaMetadata({
+          title: title || 'Untitled Track',
+          artist: artist || 'Unknown Artist',
+          album: album || 'Unknown Album',
+          artwork: artworkArray
+        });
+        this._lastSyncedMediaSessionTrackId = currentTrack.id;
+      } catch (e) {
+        console.warn("Could not set media session metadata:", e);
+      }
+    } else if (!currentTrack && this._lastSyncedMediaSessionTrackId !== null) {
+      navigator.mediaSession.metadata = null;
+      this._lastSyncedMediaSessionTrackId = null;
+    }
+
+    try {
+      switch (playbackState) {
+        case 'PLAYING':
+          navigator.mediaSession.playbackState = 'playing';
+          break;
+        case 'PAUSED':
+        case 'IDLE':
+        case 'ENDED':
+          navigator.mediaSession.playbackState = 'paused';
+          break;
+        default:
+          navigator.mediaSession.playbackState = 'none';
+          break;
+      }
+    } catch (e) {
+      console.warn('Could not set media session playbackState', e);
+    }
+
+    // if ('setPositionState' in navigator.mediaSession) {
+    //   try {
+    //     if (duration > 0 && isFinite(duration)) {
+    //       navigator.mediaSession.setPositionState({
+    //         duration: duration,
+    //         playbackRate: 1.0,
+    //         position: currentTime,
+    //       });
+    //     } else {
+    //       navigator.mediaSession.setPositionState(null);
+    //     }
+    //   } catch (e) {
+    //     console.warn("Could not set media session position state:", e);
+    //   }
+    // }
+
+    const hasValidDuration = duration > 0 && isFinite(duration);
+    const isPlaying = playbackState === 'PLAYING';
+
+    if ('setPositionState' in navigator.mediaSession) {
+          try {
+            if (hasValidDuration) {
+                navigator.mediaSession.setPositionState({
+                    duration: duration,
+                    playbackRate: isPlaying ? 1.0 : 0.0,
+                    position: Math.min(currentTime, duration),
+                });
+            } else {
+                navigator.mediaSession.setPositionState();
+            }
+          } catch(e) {
+            console.warn("Could not set media session position state:", e);
+          }
+    }
+
+    try {
+      const canNext = currentIndex >= 0 && currentIndex < queue.length - 1;
+      navigator.mediaSession.setActionHandler('nexttrack', canNext ? () => this.next() : null);
+
+      const canPrevious = currentIndex > 0;
+      navigator.mediaSession.setActionHandler('previoustrack', canPrevious ? () => this.previous() : null);
+    } catch (error) {
+      console.warn('MediaPlayer: Could not set next/previous track handlers.', error);
+    }
   }
 
   public destroy = async (): Promise<void> => {
