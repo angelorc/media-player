@@ -4,6 +4,13 @@ import { SkipForward } from 'lucide-vue-next'
 
 const { $mediaPlayer } = useNuxtApp()
 const { canGoNext } = useMediaPlayer()
+
+interface Props {
+  fill?: string
+}
+const props = withDefaults(defineProps<Props>(), {
+  fill: undefined
+})
 </script>
 
 <template>
@@ -14,6 +21,6 @@ const { canGoNext } = useMediaPlayer()
     title="Next" 
     @click="$mediaPlayer.next()"
   >
-    <SkipForward class="h-5 w-5" />
+    <SkipForward class="h-5 w-5" :fill="props.fill" />
   </Button>
 </template>

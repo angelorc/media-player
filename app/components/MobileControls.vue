@@ -1,7 +1,7 @@
 <script setup lang="ts">
 const { isVideo } = useMediaPlayer();
 
-const isMobileExpanded = defineModel<Boolean>();
+const isMobileExpanded = defineModel<boolean>();
 </script>
 
 <template>

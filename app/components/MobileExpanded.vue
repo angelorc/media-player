@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { X, Heart, Shuffle } from 'lucide-vue-next'
+import { ChevronDown, Heart } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button';
 
-const isMobileExpanded = defineModel<Boolean>();
+const isMobileExpanded = defineModel<boolean>();
 
 const {
   currentTrack,
@@ -10,6 +10,8 @@ const {
   formattedDisplayTime,
   formattedDuration
 } = useMediaPlayer();
+
+onMounted(() => nextTick())
 </script>
 
 <template>
@@ -31,7 +33,7 @@ const {
     <div class="relative z-10 flex flex-col h-full p-6">
       <div class="flex-shrink-0 flex items-start justify-end">
         <Button variant="ghost" size="icon" class="text-white/80 hover:text-white" @click="isMobileExpanded = false">
-          <X class="h-7 w-7" />
+          <ChevronDown class="h-7 w-7" />
         </Button>
       </div>
 
@@ -68,9 +70,9 @@ const {
         </div>
 
         <div class="flex items-center justify-between text-white/80">
-          <ButtonSkipBack />
-          <ButtonPlay />
-          <ButtonSkipForward />
+          <ButtonSkipBack fill="currentColor" />
+          <ButtonPlay class="w-16 h-16" />
+          <ButtonSkipForward fill="currentColor" />
         </div>
       </div>
     </div>

@@ -15,6 +15,7 @@ const {
     :max="100"
     :step="0.1"
     :disabled="!duration || isLoading"
+    variant="dark"
     @value-commit="onSeekCommit"
   />
 </template>
