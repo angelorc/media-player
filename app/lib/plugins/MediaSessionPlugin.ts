@@ -83,7 +83,8 @@ export class MediaSessionPlugin implements PlayerPlugin {
 
   private createArtworkUrls(artwork: string): { src: string; sizes: string; type: string }[] {
     const sizes = [96, 128, 192, 256, 384, 512, 720, 1024];
-    const formats = ['jpg', 'png'];
+    // const formats = ['jpg', 'png'];
+    const formats = ['jpg']
     return sizes.flatMap(size => 
       formats.map(format => ({
         src: `https://ipx.bitsong.io/f_${format},w_${size},h_${size}/${artwork}`,
@@ -164,7 +165,7 @@ export class MediaSessionPlugin implements PlayerPlugin {
       return;
     }
 
-    const { duration, currentTime, isPlaying, currentTrack } = state;
+    const { duration, currentTime, currentTrack } = state;
     const hasValidDuration = duration > 0 && isFinite(duration);
 
     // Only update position if we have a valid track and duration.
@@ -173,7 +174,7 @@ export class MediaSessionPlugin implements PlayerPlugin {
       try {
         navigator.mediaSession.setPositionState({
           duration: duration,
-          playbackRate: isPlaying ? 1.0 : 0.0,
+          playbackRate: 1.0,
           position: Math.min(currentTime, duration),
         });
       } catch (e) {
