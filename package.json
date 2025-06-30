@@ -18,6 +18,7 @@
     "clsx": "^2.1.1",
     "eslint": "^9.0.0",
     "hls.js": "^1.6.5",
+    "hookable": "^5.5.3",
     "lucide-vue-next": "^0.524.0",
     "nuxt": "^3.17.5",
     "reka-ui": "^2.3.1",

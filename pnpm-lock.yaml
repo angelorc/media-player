@@ -35,6 +35,9 @@ importers:
       hls.js:
         specifier: ^1.6.5
         version: 1.6.5
+      hookable:
+        specifier: ^5.5.3
+        version: 5.5.3
       lucide-vue-next:
         specifier: ^0.524.0
         version: 0.524.0(vue@3.5.17(typescript@5.8.3))

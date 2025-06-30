@@ -1,6 +1,5 @@
-
-import type { Level as HlsJsLevel } from 'hls.js';
-import type { StoreApi } from 'zustand/vanilla';
+// import type { Level as HlsJsLevel } from 'hls.js';
+import type { HookableCore } from './HookableCore';
 
 export interface MediaMetadata {
   title?: string;
@@ -66,28 +65,15 @@ export interface Subscription {
   unsubscribe: () => void;
 }
 
-export interface PluginCallbacks {
-  onReady?: () => void;
-  onLoading: () => void;
-  onLoadedMetadata: (metadata: { duration: number }) => void;
-  onCanPlay: () => void;
-  onPlaying: () => void;
-  onPaused: () => void;
-  onEnded: () => void;
-  onSeeking?: () => void;
-  onSeeked?: () => void;
-  onTimeUpdate: (data: { currentTime: number, duration?: number }) => void;
-  onDurationChange?: (data: { duration: number }) => void;
-  onVolumeChange?: (data: { volume: number, isMuted: boolean }) => void;
-  onError: (message: string, fatal: boolean, details?: unknown) => void;
-  onStalled?: () => void;
-  onWaiting?: () => void;
-  onStateChange?: (stateChanges: Partial<Pick<PlayerState, 'playbackState' | 'isLoading' | 'isPlaying' | 'currentTime' | 'duration' | 'error'>>) => void;
-
-  // Generic callbacks for plugins to provide their internal selectable options
-  onPluginOptionsAvailable?: (options: PluginSelectableOption[]) => void;
-  onPluginOptionChanged?: (optionId: string) => void; // Plugin indicates its active internal option
+/**
+ * Defines the API exposed to plugins, providing access to the player's
+ * lifecycle hooks and the event bus for communication back to the core.
+ */
+export interface PluginApi {
+  hooks: HookableCore; // The player's lifecycle hooks. Plugins can listen to these.
+  events: HookableCore; // The event bus for plugin->core communication. Plugins emit events here.
 }
+
 
 export interface PluginLoadOptions {
   containerElement: HTMLElement;
@@ -108,16 +94,75 @@ export interface PluginMediaControlHandlers {
   setPluginOption?: (optionId: string) => Promise<void>;
 }
 
-export interface PlayerPlugin {
-  name: string;
-  isTypeSupported(source: MediaSource): boolean;
-  load(
-    source: MediaSource,
-    callbacks: PluginCallbacks,
-    options: PluginLoadOptions
-  ): Promise<PluginMediaControlHandlers | void>;
-  onTrackUnload(): void; // Called when the plugin is about to be replaced or track stops
-  destroy(): void;
+
+export interface MediaPlayerPublicApi {
+    hooks: HookableCore;
+    events: HookableCore;
+    subscribe(callback: StateSubscriber): Subscription;
+    getState(): PlayerState;
+    loadQueue(tracks: MediaTrack[], containerElement: HTMLElement, startIndex?: number, playImmediately?: boolean): void;
+    addToQueue(track: MediaTrack): void;
+    play(): Promise<void>;
+    pause(): void;
+    stop(): Promise<void>;
+    next(): void;
+    previous(): void;
+    jumpTo(index: number): void;
+    seek(time: number): void;
+    setVolume(volume: number): void;
+    toggleMute(): void;
+    setPlayerContainer(container: HTMLElement | null): void;
+    getActiveHTMLElement(): HTMLElement | null;
+    destroy(): Promise<void>;
+    setPreferences(prefs: Partial<PlayerPreferences>): void;
+    setActiveSource(newSource: MediaSource): Promise<void>;
+    setPluginOption(optionId: string): Promise<void>;
 }
 
-export type PlayerStore = StoreApi<PlayerState>
+export interface PlayerPlugin {
+  name: string;
+  /**
+   * Defines the plugin type.
+   * 'source' plugins handle media playback for specific formats (e.g., HLS, MP4).
+   * 'feature' plugins add functionality across the player (e.g., MediaSession, analytics).
+   * Defaults to 'source' if not specified.
+   */
+  type?: 'source' | 'feature';
+
+  /**
+   * Called when the plugin is registered with the MediaPlayer instance.
+   * This is the entry point for feature plugins.
+   * @param player - The public API of the media player.
+   */
+  onRegister?(player: MediaPlayerPublicApi): void;
+  
+  /**
+   * (For 'source' plugins) Checks if the plugin can handle the given media source.
+   * @param source - The media source to check.
+   * @returns `true` if the source is supported, otherwise `false`.
+   */
+  isTypeSupported?(source: MediaSource): boolean;
+
+  /**
+   * (For 'source' plugins) Loads a media source for playback.
+   * @param source - The media source to load.
+   * @param pluginApi - Provides access to player lifecycle hooks and event bus.
+   * @param options - Loading options like container element and autoplay settings.
+   * @returns A promise that resolves with media control handlers.
+   */
+  load?(
+    source: MediaSource,
+    pluginApi: PluginApi,
+    options: PluginLoadOptions
+  ): Promise<PluginMediaControlHandlers | void>;
+
+  /**
+   * (For 'source' plugins) Called when the track handled by this plugin is being unloaded.
+   */
+  onTrackUnload?(): void;
+
+  /**
+   * Called when the MediaPlayer is being destroyed. The plugin should clean up all its resources.
+   */
+  destroy(): void;
+}

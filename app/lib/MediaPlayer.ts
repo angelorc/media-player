@@ -1,113 +1,122 @@
+import type { StateSubscriber, Subscription, MediaTrack, MediaSource, PlayerPreferences, PlayerPlugin, PluginLoadOptions, PluginMediaControlHandlers, PluginSelectableOption, PlayerState, PluginApi, MediaMetadata, PlaybackState, MediaPlayerPublicApi } from './types';
+import { PlayerStateStore, DEFAULT_PREFERENCES } from './state/PlayerStateStore';
+import { HookableCore } from './HookableCore';
 
-import { createStore } from 'zustand/vanilla';
-import type {
-  PlayerState,
-  StateSubscriber,
-  Subscription,
-  MediaTrack,
-  MediaSource,
-  PlayerPreferences,
-  PlayerPlugin,
-  PluginCallbacks,
-  PluginLoadOptions,
-  PluginMediaControlHandlers,
-  PluginSelectableOption,
-  PlayerStore,
-} from './types';
 
-export const DEFAULT_PREFERENCES: PlayerPreferences = {
-  mediaType: ['video', 'audio'],
-  formats: ['youtube', 'opus', 'hls', 'mp4', 'webm', 'ogv', 'mov', 'mp3', 'ogg', 'wav', 'flac', 'aac', 'm4a'],
-  autoplay: false,
-};
+export interface MediaPlayerParams {
+  plugins: PlayerPlugin[];
+  initialState?: Partial<PlayerState>;
+  store?: PlayerStateStore;
+}
 
-const initialPlayerState: Readonly<PlayerState> = {
-  playbackState: 'IDLE',
-  isLoading: false,
-  isPlaying: false,
-  isMuted: false,
-  currentTrack: null,
-  activeSource: null,
-  currentIndex: -1,
-  queue: [],
-  currentTime: 0,
-  duration: 0,
-  volume: 1,
-  error: null,
-  preferences: DEFAULT_PREFERENCES,
-  activePluginName: null,
-  pluginOptions: [],
-  activePluginOptionId: null,
-};
-
-export class MediaPlayer {
+export class MediaPlayer implements MediaPlayerPublicApi {
   private _activePlugin: PlayerPlugin | null = null;
   private _activePluginHandlers: PluginMediaControlHandlers | null = null;
-  private _plugins: PlayerPlugin[];
-
-  private store: PlayerStore;
-  private _preferences: PlayerPreferences = DEFAULT_PREFERENCES;
-  private _preMuteVolume: number;
-
+  private _sourcePlugins: PlayerPlugin[];
+  private _featurePlugins: PlayerPlugin[];
   private _containerEl: HTMLElement | null = null;
+  private _playWhenReady = false;
+  
+  public stateStore: PlayerStateStore;
+  public hooks: HookableCore;
+  public events: HookableCore;
 
-  private _lastSyncedMediaSessionTrackId: string | null = null;
+  constructor(params: MediaPlayerParams) {
+    // 1. Initialize stateStore first, as other parts depend on it.
+    this.stateStore = params.store || new PlayerStateStore(params.initialState);
 
-  constructor(plugins: PlayerPlugin[]) {
-    this._plugins = plugins;
-    this.store = createStore<PlayerState>(() => ({ ...initialPlayerState }));
+    // 2. Initialize hooks and event bus.
+    this.hooks = new HookableCore();
+    this.events = new HookableCore();
 
-    const initialState = this.store.getState();
-    this._preMuteVolume = initialState.isMuted ? 0.5 : (initialState.volume > 0 ? initialState.volume : 0.5);
-    if (this._preferences !== initialState.preferences) {
-      this.store.setState({ preferences: this._preferences });
+    // 3. Setup listeners that connect the event bus to the state store.
+    this._setupEventListeners();
+
+    // 4. Separate plugins into source handlers and feature plugins.
+    this._sourcePlugins = [];
+    this._featurePlugins = [];
+    params.plugins.forEach(plugin => {
+        // Default to 'source' plugin if type is not specified
+        if (plugin.type === 'feature') {
+            this._featurePlugins.push(plugin);
+        } else {
+            this._sourcePlugins.push(plugin);
+        }
+    });
+
+    // 5. Register all plugins, allowing them to hook into the player instance.
+    // Now they can safely call subscribe().
+    params.plugins.forEach(plugin => {
+        plugin.onRegister?.(this);
+    });
+
+    // 6. Ensure preferences are set if not provided in initial state.
+    if (!params.initialState?.preferences) {
+      this.stateStore.setPreferences(DEFAULT_PREFERENCES);
     }
+    
+    // 7. Finalize initialization.
+    this.hooks.callHook('player:init', { instance: this }).catch(e => console.error("Error in player:init hook:", e));
+  }
 
-    this._initMediaSession();
+  private _setupEventListeners() {
+    this.events.hook('plugin:loading', () => this.stateStore.setLoading());
+    this.events.hook('plugin:loadedmetadata', (metadata: { duration: number }) => this.stateStore.setMetadataLoaded(metadata));
+    this.events.hook('plugin:canplay', () => {
+      this.stateStore.setCanPlay();
+      const latestState = this.stateStore.getState();
+      if (this._playWhenReady && (latestState.playbackState === 'LOADING' || latestState.playbackState === 'PAUSED')) {
+        this.play().catch(e => console.warn("Autoplay after onCanPlay failed:", e));
+      }
+      this._playWhenReady = false; // Reset after use
+    });
+    this.events.hook('plugin:playing', () => {
+      this.hooks.callHook('player:playing').catch(e => console.error("Error in player:playing hook:", e));
+      this.stateStore.setPlaying();
+    });
+    this.events.hook('plugin:paused', () => {
+      this.hooks.callHook('player:paused').catch(e => console.error("Error in player:paused hook:", e));
+      this.stateStore.setPaused();
+    });
+    this.events.hook('plugin:ended', () => {
+      const endedTrack = this.stateStore.getState().currentTrack;
+      if (endedTrack) {
+        this.hooks.callHook('track:end', { track: endedTrack }).catch(e => console.error("Error in track:end hook:", e));
+      }
+      this.stateStore.setEnded();
+      this.next();
+    });
+    this.events.hook('plugin:timeupdate', (data: { currentTime: number, duration?: number }) => {
+      this.hooks.callHook('player:timeupdate', data).catch(e => console.error("Error in player:timeupdate hook:", e));
+      this.stateStore.setTimeUpdate(data);
+    });
+    this.events.hook('plugin:durationchange', (data: { duration: number }) => this.stateStore.setDurationChange(data));
+    this.events.hook('plugin:error', ({ message, fatal, details }: { message: string, fatal: boolean, details?: unknown }) => {
+      console.error("MediaPlayer: Plugin Error:", message, "Fatal:", fatal, "Details:", details);
+      this.hooks.callHook('player:error', { message, fatal, details }).catch(e => console.error("Error in player:error hook:", e));
+      this.stateStore.setError(message);
+    });
+    this.events.hook('plugin:stalled', () => this.stateStore.setStalled());
+    this.events.hook('plugin:waiting', () => this.stateStore.setWaiting());
+    this.events.hook('plugin:volumechange', (data: { volume: number, isMuted: boolean }) => this.stateStore.setVolume(data));
+    this.events.hook('plugin:optionsavailable', (options: PluginSelectableOption[]) => this.stateStore.setPluginOptionsAvailable(options));
+    this.events.hook('plugin:optionchanged', (optionId: string) => this.stateStore.setActivePluginOption(optionId));
   }
 
   public subscribe(callback: StateSubscriber): Subscription {
-    const unsubscribe = this.store.subscribe((state) => callback(state));
-    callback(this.store.getState());
-    return { unsubscribe };
+    // The subscribe method on PlayerStateStore now handles invoking the callback immediately.
+    return this.stateStore.subscribe(callback);
   }
 
-  private _updateState = (newState: Partial<PlayerState>): void => {
-    const currentState = this.store.getState();
-
-    const isNewTrackLoading = newState.currentTrack && currentState.currentTrack && newState.currentTrack.id !== currentState.currentTrack.id;
-    const isNewSourceLoading = newState.activeSource && currentState.activeSource && newState.activeSource.src !== currentState.activeSource.src;
-
-    if ((isNewTrackLoading || isNewSourceLoading) && currentState.playbackState === 'LOADING') {
-      if (newState.playbackState && newState.playbackState !== 'IDLE' && newState.playbackState !== 'ERROR' && !newState.error) {
-        return;
-      }
-    }
-
-    if (newState.volume !== undefined || newState.isMuted !== undefined) {
-      const targetVolume = newState.volume ?? currentState.volume;
-      const targetMuted = newState.isMuted ?? currentState.isMuted;
-
-      if (newState.isMuted === true && currentState.isMuted === false) {
-        this._preMuteVolume = currentState.volume > 0 ? currentState.volume : 0.5;
-      } else if (newState.volume !== undefined && targetVolume > 0 && (newState.isMuted === false || (newState.isMuted === undefined && !currentState.isMuted))) {
-        this._preMuteVolume = targetVolume;
-      }
-    }
-
-    this.store.setState(newState);
-  };
-
-  public getState = (): PlayerState => this.store.getState();
+  public getState = (): PlayerState => this.stateStore.getState();
 
   public setPreferences = (prefs: Partial<PlayerPreferences>): void => {
-    this._preferences = { ...this._preferences, ...prefs };
-    this._updateState({ preferences: this._preferences });
+    this.stateStore.setPreferences(prefs);
   };
 
   private _findPluginForSource(source: MediaSource): PlayerPlugin | null {
-    for (const plugin of this._plugins) {
-      if (plugin.isTypeSupported(source)) {
+    for (const plugin of this._sourcePlugins) {
+      if (plugin.isTypeSupported && plugin.isTypeSupported(source)) {
         return plugin;
       }
     }
@@ -115,7 +124,7 @@ export class MediaPlayer {
   }
 
   private _findBestSource(track: MediaTrack): { source: MediaSource; plugin: PlayerPlugin } | null {
-    const currentPrefs = this.store.getState().preferences;
+    const currentPrefs = this.stateStore.getState().preferences;
     for (const mediaTypePref of currentPrefs.mediaType) {
       for (const formatPref of currentPrefs.formats) {
         const source = track.sources.find(
@@ -143,21 +152,13 @@ export class MediaPlayer {
 
   public loadQueue = (tracks: MediaTrack[], containerElement: HTMLElement, startIndex = 0, playImmediately?: boolean): void => {
     this._containerEl = containerElement;
-    this._unloadActivePlugin();
+    this._unloadActivePlugin(); 
 
-    this._updateState({
-      queue: tracks,
-      currentIndex: -1,
-      currentTrack: null,
-      activeSource: null,
-      activePluginName: null,
-      pluginOptions: [],
-      activePluginOptionId: null,
-      playbackState: 'IDLE',
-      error: null,
-    });
+    this.stateStore.setQueue(tracks);
+    this.hooks.callHook('queue:load', { tracks, startIndex }).catch(e => console.error("Error in queue:load hook:", e));
+    
     if (tracks.length > 0 && startIndex < tracks.length) {
-      const autoplayPref = this.store.getState().preferences.autoplay;
+      const autoplayPref = this.stateStore.getState().preferences.autoplay;
       this._loadTrack(startIndex, playImmediately ?? autoplayPref ?? false);
     } else {
       this.stop();
@@ -165,6 +166,11 @@ export class MediaPlayer {
   };
 
   private _unloadActivePlugin = async () => {
+    const trackToUnload = this.getState().currentTrack;
+    if (trackToUnload) {
+        await this.hooks.callHook('track:unload', { track: trackToUnload });
+    }
+
     if (this._activePluginHandlers?.stop) {
       try {
         await this._activePluginHandlers.stop();
@@ -177,41 +183,42 @@ export class MediaPlayer {
     }
     this._activePlugin = null;
     this._activePluginHandlers = null;
-
-    const currentState = this.store.getState();
-    if (currentState.pluginOptions?.length || currentState.activePluginOptionId) {
-      this._updateState({ pluginOptions: [], activePluginOptionId: null });
-    }
+    
+    this.stateStore.clearPluginData();
   };
 
   private _loadTrack = async (
     index: number,
     playImmediately: boolean,
-    preferredSource?: MediaSource,
-    mediaElement?: HTMLVideoElement | HTMLAudioElement
+    preferredSource?: MediaSource
   ): Promise<void> => {
-    const currentState = this.store.getState();
+    this._playWhenReady = playImmediately;
+    const currentState = this.stateStore.getState();
     const track = currentState.queue[index];
 
     if (!track || !this._containerEl) {
-      this._updateState({ error: "Track or container not available", playbackState: 'ERROR', isLoading: false });
+      this.stateStore.setError("Track or container not available");
       return;
     }
+    
+    await this.hooks.callHook('track:load', { track, index });
 
     const targetSource = preferredSource || this._findBestSource(track)?.source;
     if (!targetSource) {
       const errorMsg = `No playable source found for track: ${track.metadata?.title || track.id}`;
-      this._updateState({ error: errorMsg, playbackState: 'ERROR', isLoading: false, currentTrack: track, currentIndex: index, activeSource: null, activePluginName: null });
+      this.stateStore.setError(errorMsg);
+      this.stateStore.store.setState({ currentTrack: track, currentIndex: index, activeSource: null, activePluginName: null });
       return;
     }
 
     const targetPlugin = this._findPluginForSource(targetSource);
-    if (!targetPlugin) {
+    if (!targetPlugin || !targetPlugin.load) {
       const errorMsg = `No plugin supports source: ${targetSource.format} for track ${track.metadata?.title || track.id}`;
-      this._updateState({ error: errorMsg, playbackState: 'ERROR', isLoading: false, currentTrack: track, currentIndex: index, activeSource: targetSource, activePluginName: null });
+      this.stateStore.setError(errorMsg);
+      this.stateStore.store.setState({ currentTrack: track, currentIndex: index, activeSource: targetSource, activePluginName: null });
       return;
     }
-
+    
     const needsPluginChange =
       this._activePlugin !== targetPlugin ||
       currentState.activeSource?.src !== targetSource.src ||
@@ -221,250 +228,192 @@ export class MediaPlayer {
       await this._unloadActivePlugin();
     }
 
-    const currentDuration = track.duration || currentState.duration || 0;
-
-    this._updateState({
-      isLoading: true,
-      playbackState: 'LOADING',
-      currentIndex: index,
-      currentTrack: track,
-      activeSource: targetSource,
-      activePluginName: targetPlugin.name,
-      duration: needsPluginChange ? 0 : currentDuration,
-      currentTime: needsPluginChange ? 0 : currentState.currentTime,
-      error: null,
-      ...(needsPluginChange && { pluginOptions: [], activePluginOptionId: null }),
-    });
+    this.stateStore.startTrackChange(index, track, targetSource, targetPlugin.name, needsPluginChange);
 
     this._activePlugin = targetPlugin;
-    const { volume, isMuted } = this.store.getState();
+    const { volume, isMuted } = this.stateStore.getState();
 
-    const pluginCallbacks: PluginCallbacks = {
-      onLoading: () => this._updateState({ isLoading: true, playbackState: 'LOADING' }),
-      onLoadedMetadata: (metadata) => this._updateState({ duration: metadata.duration, isLoading: false }),
-      onCanPlay: () => {
-        this._updateState({ isLoading: false });
-        const latestState = this.store.getState();
-        if (playImmediately && (latestState.playbackState === 'LOADING' || latestState.playbackState === 'PAUSED')) {
-          this.play().catch(e => console.warn("Autoplay after onCanPlay failed:", e));
-        } else if (!latestState.isPlaying && latestState.playbackState !== 'ERROR' && latestState.playbackState !== 'PLAYING') {
-          this._updateState({ playbackState: 'PAUSED' });
-        }
-      },
-      onPlaying: () => this._updateState({ isPlaying: true, isLoading: false, playbackState: 'PLAYING', error: null }),
-      onPaused: () => this._updateState({ isPlaying: false, playbackState: 'PAUSED' }),
-      onEnded: () => {
-        const endedState = this.store.getState();
-        this._updateState({ isPlaying: false, playbackState: 'ENDED', currentTime: endedState.duration });
-        this.next();
-      },
-      onTimeUpdate: (data) => this._updateState({ currentTime: data.currentTime, duration: data.duration ?? this.store.getState().duration }),
-      onDurationChange: (data) => this._updateState({ duration: data.duration }),
-      onError: (message, fatal, details) => {
-        console.error("MediaPlayer: Plugin Error:", message, "Fatal:", fatal, "Details:", details);
-        this._updateState({ error: message, playbackState: 'ERROR', isLoading: false, isPlaying: false });
-      },
-      onStalled: () => this._updateState({ isLoading: true, playbackState: 'STALLED' }),
-      onWaiting: () => this._updateState({ isLoading: true, playbackState: 'LOADING' }),
-      onVolumeChange: (data) => this._updateState({ volume: data.volume, isMuted: data.isMuted }),
-
-      onPluginOptionsAvailable: (options: PluginSelectableOption[]) => {
-        this._updateState({ pluginOptions: options });
-      },
-      onPluginOptionChanged: (optionId: string) => {
-        this._updateState({ activePluginOptionId: optionId });
-      },
-    };
-
-    const loadOptions: PluginLoadOptions & { mediaElement?: HTMLVideoElement | HTMLAudioElement } = {
+    const loadOptions: PluginLoadOptions = {
       containerElement: this._containerEl,
       initialVolume: volume,
       initialMute: isMuted,
       autoplay: playImmediately,
-      mediaElement: mediaElement,
+    };
+
+    const pluginApi: PluginApi = {
+        hooks: this.hooks,
+        events: this.events
     };
 
     try {
       if (needsPluginChange || !this._activePluginHandlers) {
-        const handlers = await this._activePlugin.load(targetSource, pluginCallbacks, loadOptions);
+        const handlers = await this._activePlugin.load(targetSource, pluginApi, loadOptions);
         this._activePluginHandlers = handlers || null;
       } else {
-        if (playImmediately) this.play().catch(e => console.warn("Re-play after no-op load failed:", e));
+         if (playImmediately) this.play().catch(e => console.warn("Re-play after no-op load failed:", e));
       }
-
-      const postLoadState = this.store.getState();
-      if (postLoadState.playbackState === 'LOADING' && !postLoadState.isPlaying && !postLoadState.error) {
-        this._updateState({ playbackState: 'PAUSED', isLoading: false });
-      }
+      
+      this.stateStore.endTrackChange();
 
     } catch (e) {
       const errorMsg = `Error loading track with plugin ${targetPlugin.name}: ${(e as Error).message}`;
       console.error(errorMsg, e);
-      this._updateState({ error: errorMsg, playbackState: 'ERROR', isLoading: false, isPlaying: false });
+      this.stateStore.setError(errorMsg);
     }
   };
 
-  public async setActiveSource(newSource: MediaSource, mediaElement?: HTMLVideoElement | HTMLAudioElement): Promise<void> {
-    const { currentTrack, currentIndex, activeSource, isPlaying } = this.store.getState();
+  public async setActiveSource(newSource: MediaSource): Promise<void> {
+    const {currentTrack, currentIndex, activeSource, isPlaying} = this.stateStore.getState();
     if (!currentTrack || currentIndex === -1) {
-      console.warn("MediaPlayer: Cannot set source, no current track.");
-      return;
+        console.warn("MediaPlayer: Cannot set source, no current track.");
+        return;
     }
     if (activeSource?.src === newSource.src) {
-      console.log("MediaPlayer: Selected source is already active.");
-      return;
+        console.log("MediaPlayer: Selected source is already active.");
+        return;
     }
-    await this._loadTrack(currentIndex, isPlaying, newSource, mediaElement);
+    await this.hooks.callHook('source:change', { newSource });
+    await this._loadTrack(currentIndex, isPlaying, newSource);
   }
 
   public async setPluginOption(optionId: string): Promise<void> {
     if (!this._activePluginHandlers?.setPluginOption) {
-      console.warn("MediaPlayer: Active plugin does not support setting options.");
-      return;
+        console.warn("MediaPlayer: Active plugin does not support setting options.");
+        return;
     }
-    if (this.store.getState().activePluginOptionId === optionId) {
-      console.log("MediaPlayer: Plugin option is already active.");
-      return;
+    if (this.stateStore.getState().activePluginOptionId === optionId) {
+        console.log("MediaPlayer: Plugin option is already active.");
+        return;
     }
     try {
-      await this._activePluginHandlers.setPluginOption(optionId);
+        await this.hooks.callHook('plugin:optionchange', { optionId });
+        await this._activePluginHandlers.setPluginOption(optionId);
     } catch (error) {
-      console.error("MediaPlayer: Error setting plugin option:", error);
-      this._updateState({ error: (error as Error).message, isLoading: false });
+        console.error("MediaPlayer: Error setting plugin option:", error);
+        this.stateStore.setError((error as Error).message);
     }
   }
 
   public addToQueue = (track: MediaTrack): void => {
-    const currentState = this.store.getState();
-    const newQueue = [...currentState.queue, track];
-    this._updateState({ queue: newQueue });
-    if (currentState.currentIndex === -1 && newQueue.length === 1 && this._containerEl) {
-      const autoplayPref = this.store.getState().preferences.autoplay;
+    const currentState = this.stateStore.getState();
+    this.stateStore.addToQueue(track);
+    this.hooks.callHook('queue:add', { track }).catch(e => console.error("Error in queue:add hook:", e));
+    if (currentState.currentIndex === -1 && currentState.queue.length === 0 && this._containerEl) {
+      const autoplayPref = this.stateStore.getState().preferences.autoplay;
       this._loadTrack(0, autoplayPref ?? false);
     }
   };
 
   public play = async (): Promise<void> => {
-    const { playbackState } = this.store.getState();
+    const { playbackState } = this.stateStore.getState();
     if (playbackState === 'ERROR' || !this._activePluginHandlers?.play) {
       return;
     }
     if (playbackState !== 'PLAYING') {
       try {
+        await this.hooks.callHook('player:play');
         await this._activePluginHandlers.play();
       } catch (error) {
         console.error('MediaPlayer: Error calling plugin play:', error);
-        this._updateState({ playbackState: 'PAUSED', isPlaying: false, isLoading: false, error: (error as Error).message });
+        this.stateStore.setError((error as Error).message);
+        this.stateStore.setPaused(); // Revert to paused on play failure
       }
     }
   };
 
   public pause = (): void => {
-    if (this._activePluginHandlers?.pause && this.store.getState().isPlaying) {
+    if (this._activePluginHandlers?.pause && this.stateStore.getState().isPlaying) {
       try {
+        this.hooks.callHook('player:pause').catch(e => console.error("Error in player:pause hook:", e));
         this._activePluginHandlers.pause();
       } catch (error) {
         console.error('MediaPlayer: Error calling plugin pause:', error);
-        this._updateState({ error: (error as Error).message });
+        this.stateStore.setError((error as Error).message);
       }
     }
   };
 
   public stop = async (): Promise<void> => {
     await this._unloadActivePlugin();
-    this._updateState({
-      playbackState: 'IDLE',
-      isPlaying: false,
-      isLoading: false,
-      currentTime: 0,
-      duration: 0,
-      currentTrack: null,
-      activeSource: null,
-      currentIndex: -1,
-      activePluginName: null,
-      error: null,
-      pluginOptions: [],
-      activePluginOptionId: null,
-    });
+    this.stateStore.reset();
   };
 
   public next = (): void => {
-    const { currentIndex, queue, isPlaying } = this.store.getState();
+    const { currentIndex, queue, isPlaying } = this.stateStore.getState();
     const nextIndex = currentIndex + 1;
     if (nextIndex < queue.length) {
-      const autoplayPref = this.store.getState().preferences.autoplay;
+      const autoplayPref = this.stateStore.getState().preferences.autoplay;
       this._loadTrack(nextIndex, isPlaying || (autoplayPref ?? false));
     } else {
       this.stop().then(() => {
-        const finalState = this.store.getState();
+        const finalState = this.stateStore.getState();
         if (finalState.playbackState !== 'IDLE' && finalState.playbackState !== 'ENDED') {
-          this._updateState({ playbackState: 'IDLE' });
+           this.stateStore.setPlaybackState('IDLE');
         }
       });
     }
   };
 
   public previous = (): void => {
-    const { currentIndex, queue, isPlaying } = this.store.getState();
+    const { currentIndex, queue, isPlaying } = this.stateStore.getState();
     const prevIndex = currentIndex - 1;
     if (prevIndex >= 0) {
-      const autoplayPref = this.store.getState().preferences.autoplay;
+      const autoplayPref = this.stateStore.getState().preferences.autoplay;
       this._loadTrack(prevIndex, isPlaying || (autoplayPref ?? false));
     }
   };
 
   public jumpTo = (index: number): void => {
-    const { currentIndex, queue, isPlaying, activeSource } = this.store.getState();
+    const { currentIndex, queue, isPlaying, activeSource } = this.stateStore.getState();
     if (index >= 0 && index < queue.length && this._containerEl) {
-      if (index === currentIndex && activeSource) {
-        this.seek(0);
-        if (!isPlaying) this.play().catch(e => console.warn("Re-play on jumpTo same track failed:", e));
+      if (index === currentIndex && activeSource) { 
+          this.seek(0);
+          if(!isPlaying) this.play().catch(e => console.warn("Re-play on jumpTo same track failed:", e));
       } else {
-        const autoplayPref = this.store.getState().preferences.autoplay;
+        const autoplayPref = this.stateStore.getState().preferences.autoplay;
         this._loadTrack(index, isPlaying || (autoplayPref ?? false));
       }
     }
   };
 
   public seek = (time: number): void => {
-    const { duration } = this.store.getState();
+    const { duration } = this.stateStore.getState();
     if (!this._activePluginHandlers?.seek || duration === 0) return;
     const newTime = Math.max(0, Math.min(time, duration));
     try {
+      this.hooks.callHook('player:seek', { time: newTime }).catch(e => console.error("Error in player:seek hook:", e));
       this._activePluginHandlers.seek(newTime);
-    } catch (error) {
+    } catch (error)
+{
       console.error('MediaPlayer: Error calling plugin seek:', error);
-      this._updateState({ error: (error as Error).message });
+      this.stateStore.setError((error as Error).message);
     }
   };
 
   public setVolume = (volume: number): void => {
     const newVolume = Math.max(0, Math.min(1, volume));
     const newMuted = newVolume === 0;
-    const currentState = this.store.getState();
 
-    if (newMuted && !currentState.isMuted) {
-      this._preMuteVolume = currentState.volume > 0 ? currentState.volume : 0.5;
-    } else if (!newMuted && newVolume > 0) {
-      this._preMuteVolume = newVolume;
-    }
+    this.hooks.callHook('player:volumechange', { volume: newVolume, isMuted: newMuted }).catch(e => console.error("Error in player:volumechange hook:", e));
 
     if (this._activePluginHandlers?.setVolume) {
       try {
         this._activePluginHandlers.setVolume(newVolume, newMuted);
       } catch (error) {
         console.error('MediaPlayer: Error calling plugin setVolume:', error);
-        this._updateState({ error: (error as Error).message, volume: newVolume, isMuted: newMuted });
+        this.stateStore.setError((error as Error).message);
       }
     } else {
-      this._updateState({ volume: newVolume, isMuted: newMuted });
+      // If no plugin handler, update state directly. The callback handles pre-mute logic.
+      this.stateStore.setVolume({ volume: newVolume, isMuted: newMuted });
     }
   };
 
   public toggleMute = (): void => {
-    const currentState = this.store.getState();
+    const currentState = this.stateStore.getState();
     if (currentState.isMuted) {
-      this.setVolume(this._preMuteVolume > 0 ? this._preMuteVolume : 0.5);
+      const preMuteVolume = this.stateStore.getPreMuteVolume();
+      this.setVolume(preMuteVolume > 0 ? preMuteVolume : 0.5);
     } else {
       this.setVolume(0);
     }
@@ -478,132 +427,13 @@ export class MediaPlayer {
     return this._activePluginHandlers?.getHTMLElement?.() || null;
   }
 
-  private _initMediaSession(): void {
-    if (!('mediaSession' in navigator)) {
-      return;
-    }
-
-    this.subscribe(this._syncMediaSessionState.bind(this));
-
-    try {
-      navigator.mediaSession.setActionHandler('play', () => { this.play().catch(e => console.warn("MediaSession: play() action failed.", e)); });
-      navigator.mediaSession.setActionHandler('pause', () => this.pause());
-      navigator.mediaSession.setActionHandler('stop', () => { this.stop().catch(e => console.warn("MediaSession: stop() action failed.", e)); });
-
-      navigator.mediaSession.setActionHandler('seekbackward', (details) => {
-        const seekOffset = details.seekOffset || 10;
-        this.seek(this.getState().currentTime - seekOffset);
-      });
-
-      navigator.mediaSession.setActionHandler('seekforward', (details) => {
-        const seekOffset = details.seekOffset || 10;
-        this.seek(this.getState().currentTime + seekOffset);
-      });
-
-      navigator.mediaSession.setActionHandler('seekto', (details) => {
-        if (details.seekTime !== null && details.seekTime !== undefined && !details.fastSeek) {
-          this.seek(details.seekTime);
-        }
-      });
-    } catch (error) {
-      console.warn('MediaPlayer: Could not set some media session action handlers.', error);
-    }
-  }
-
-  private _syncMediaSessionState(state: PlayerState): void {
-    if (!('mediaSession' in navigator) || !window.MediaMetadata) {
-      return;
-    }
-
-    const { currentTrack, playbackState, duration, currentTime, queue, currentIndex } = state;
-
-    if (currentTrack && currentTrack.id !== this._lastSyncedMediaSessionTrackId) {
-      const { title, artist, album, artwork } = currentTrack.metadata || {};
-      const artworkArray = artwork ? [{ src: artwork, sizes: '512x512', type: 'image/jpeg' }] : [];
-
-      try {
-        navigator.mediaSession.metadata = new window.MediaMetadata({
-          title: title || 'Untitled Track',
-          artist: artist || 'Unknown Artist',
-          album: album || 'Unknown Album',
-          artwork: artworkArray
-        });
-        this._lastSyncedMediaSessionTrackId = currentTrack.id;
-      } catch (e) {
-        console.warn("Could not set media session metadata:", e);
-      }
-    } else if (!currentTrack && this._lastSyncedMediaSessionTrackId !== null) {
-      navigator.mediaSession.metadata = null;
-      this._lastSyncedMediaSessionTrackId = null;
-    }
-
-    try {
-      switch (playbackState) {
-        case 'PLAYING':
-          navigator.mediaSession.playbackState = 'playing';
-          break;
-        case 'PAUSED':
-        case 'IDLE':
-        case 'ENDED':
-          navigator.mediaSession.playbackState = 'paused';
-          break;
-        default:
-          navigator.mediaSession.playbackState = 'none';
-          break;
-      }
-    } catch (e) {
-      console.warn('Could not set media session playbackState', e);
-    }
-
-    // if ('setPositionState' in navigator.mediaSession) {
-    //   try {
-    //     if (duration > 0 && isFinite(duration)) {
-    //       navigator.mediaSession.setPositionState({
-    //         duration: duration,
-    //         playbackRate: 1.0,
-    //         position: currentTime,
-    //       });
-    //     } else {
-    //       navigator.mediaSession.setPositionState(null);
-    //     }
-    //   } catch (e) {
-    //     console.warn("Could not set media session position state:", e);
-    //   }
-    // }
-
-    const hasValidDuration = duration > 0 && isFinite(duration);
-    const isPlaying = playbackState === 'PLAYING';
-
-    if ('setPositionState' in navigator.mediaSession) {
-          try {
-            if (hasValidDuration) {
-                navigator.mediaSession.setPositionState({
-                    duration: duration,
-                    playbackRate: isPlaying ? 1.0 : 0.0,
-                    position: Math.min(currentTime, duration),
-                });
-            } else {
-                navigator.mediaSession.setPositionState();
-            }
-          } catch(e) {
-            console.warn("Could not set media session position state:", e);
-          }
-    }
-
-    try {
-      const canNext = currentIndex >= 0 && currentIndex < queue.length - 1;
-      navigator.mediaSession.setActionHandler('nexttrack', canNext ? () => this.next() : null);
-
-      const canPrevious = currentIndex > 0;
-      navigator.mediaSession.setActionHandler('previoustrack', canPrevious ? () => this.previous() : null);
-    } catch (error) {
-      console.warn('MediaPlayer: Could not set next/previous track handlers.', error);
-    }
-  }
-
   public destroy = async (): Promise<void> => {
+    await this.hooks.callHook('player:destroy');
     await this.stop();
-    this._plugins.forEach(plugin => plugin.destroy?.());
+    this._sourcePlugins.forEach(plugin => plugin.destroy());
+    this._featurePlugins.forEach(plugin => plugin.destroy());
     this._containerEl = null;
+    this.hooks.removeAllHooks();
+    this.events.removeAllHooks();
   };
 }

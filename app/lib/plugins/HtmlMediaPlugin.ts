@@ -1,5 +1,4 @@
-
-import type { PlayerPlugin, MediaSource, PluginCallbacks, PluginLoadOptions, PluginMediaControlHandlers } from '../types';
+import type { PlayerPlugin, MediaSource, PluginLoadOptions, PluginMediaControlHandlers, PluginApi } from '../types';
 
 const StandardMimeTypes: Record<string, string> = {
   // Audio
@@ -21,7 +20,7 @@ export class HtmlMediaPlugin implements PlayerPlugin {
   public name = 'HtmlMediaPlugin';
   private mediaElement: HTMLVideoElement | HTMLAudioElement | null = null;
   private currentContainer: HTMLElement | null = null;
-  private currentCallbacks: PluginCallbacks | null = null;
+  private pluginApi: PluginApi | null = null;
   private eventListeners: Array<{ event: string, handler: EventListenerOrEventListenerObject }> = [];
 
   isTypeSupported(source: MediaSource): boolean {
@@ -40,21 +39,15 @@ export class HtmlMediaPlugin implements PlayerPlugin {
 
   async load(
     source: MediaSource,
-    callbacks: PluginCallbacks,
-    options: PluginLoadOptions & { mediaElement?: HTMLVideoElement | HTMLAudioElement }
+    pluginApi: PluginApi,
+    options: PluginLoadOptions
   ): Promise<PluginMediaControlHandlers> {
     this.onTrackUnload(); 
 
-    this.currentCallbacks = callbacks;
+    this.pluginApi = pluginApi;
     this.currentContainer = options.containerElement;
 
-    if (options.mediaElement) {
-      this.mediaElement = options.mediaElement;
-    } else {
-      this.mediaElement = document.createElement(source.mediaType) as HTMLVideoElement | HTMLAudioElement;
-    }
-
-    // this.mediaElement = document.createElement(source.mediaType) as HTMLVideoElement | HTMLAudioElement;
+    this.mediaElement = document.createElement(source.mediaType) as HTMLVideoElement | HTMLAudioElement;
     this.mediaElement.setAttribute('playsinline', 'true');
     this.mediaElement.controls = false; 
     this.mediaElement.volume = options.initialVolume;
@@ -65,27 +58,27 @@ export class HtmlMediaPlugin implements PlayerPlugin {
     }
 
 
-    this._attachEventListeners(this.mediaElement, callbacks);
+    this._attachEventListeners(this.mediaElement, pluginApi);
     
     this.mediaElement.src = source.src;
     this.mediaElement.load();
 
     if (this.currentContainer) {
       this.currentContainer.appendChild(this.mediaElement);
-      // if (this.mediaElement instanceof HTMLVideoElement) {
-      //   this.mediaElement.style.width = '100%';
-      //   this.mediaElement.style.height = '100%';
-      //   this.mediaElement.style.objectFit = 'contain';
-      // }
+      if (this.mediaElement instanceof HTMLVideoElement) {
+        this.mediaElement.style.width = '100%';
+        this.mediaElement.style.height = '100%';
+        this.mediaElement.style.objectFit = 'contain';
+      }
     } else {
-        callbacks.onError('HtmlMediaPlugin: Container element not provided.', true);
+        this.pluginApi.events.callHook('plugin:error', { message: 'HtmlMediaPlugin: Container element not provided.', fatal: true });
         throw new Error('Container element not provided for HtmlMediaPlugin');
     }
 
     if (options.autoplay) {
       this.mediaElement.play().catch(err => {
         console.warn(`HtmlMediaPlugin: Autoplay prevented for ${source.src}`, err);
-        callbacks.onPaused(); 
+        this.pluginApi?.events.callHook('plugin:paused');
       });
     }
 
@@ -112,7 +105,7 @@ export class HtmlMediaPlugin implements PlayerPlugin {
         if (this.mediaElement) {
           this.mediaElement.volume = volume;
           this.mediaElement.muted = isMuted;
-          callbacks.onVolumeChange?.({ volume: this.mediaElement.volume, isMuted: this.mediaElement.muted });
+          this.pluginApi?.events.callHook('plugin:volumechange', { volume: this.mediaElement.volume, isMuted: this.mediaElement.muted });
         }
       },
       getHTMLElement: () => this.mediaElement,
@@ -130,7 +123,7 @@ export class HtmlMediaPlugin implements PlayerPlugin {
 
   private _attachEventListeners(
     mediaEl: HTMLAudioElement | HTMLVideoElement,
-    callbacks: PluginCallbacks
+    pluginApi: PluginApi
   ): void {
     this._removeEventListeners(); 
 
@@ -139,17 +132,17 @@ export class HtmlMediaPlugin implements PlayerPlugin {
         this.eventListeners.push({event, handler});
     };
 
-    add('loadstart', () => callbacks.onLoading());
-    add('loadedmetadata', () => callbacks.onLoadedMetadata({ duration: mediaEl.duration }));
+    add('loadstart', () => pluginApi.events.callHook('plugin:loading'));
+    add('loadedmetadata', () => pluginApi.events.callHook('plugin:loadedmetadata', { duration: mediaEl.duration }));
     add('loadeddata', () => { /* Often implies canplaythrough will follow, or at least canplay */ });
-    add('canplay', () => callbacks.onCanPlay());
-    add('canplaythrough', () => callbacks.onCanPlay()); 
-    add('playing', () => callbacks.onPlaying());
+    add('canplay', () => pluginApi.events.callHook('plugin:canplay'));
+    add('canplaythrough', () => pluginApi.events.callHook('plugin:canplay')); 
+    add('playing', () => pluginApi.events.callHook('plugin:playing'));
     add('play', () => { /* Play intent, `playing` event confirms actual start */ });
-    add('pause', () => callbacks.onPaused());
-    add('ended', () => callbacks.onEnded());
-    add('timeupdate', () => callbacks.onTimeUpdate({ currentTime: mediaEl.currentTime, duration: mediaEl.duration }));
-    add('durationchange', () => callbacks.onDurationChange?.({ duration: mediaEl.duration }));
+    add('pause', () => pluginApi.events.callHook('plugin:paused'));
+    add('ended', () => pluginApi.events.callHook('plugin:ended'));
+    add('timeupdate', () => pluginApi.events.callHook('plugin:timeupdate', { currentTime: mediaEl.currentTime, duration: mediaEl.duration }));
+    add('durationchange', () => pluginApi.events.callHook('plugin:durationchange', { duration: mediaEl.duration }));
     add('error', () => {
       const error = mediaEl.error;
       let errorMsg = `Media Error: Code ${error?.code}`;
@@ -164,13 +157,13 @@ export class HtmlMediaPlugin implements PlayerPlugin {
       } else {
         errorMsg = 'An unknown media error occurred on the element.';
       }
-      callbacks.onError(errorMsg, true, error);
+      pluginApi.events.callHook('plugin:error', { message: errorMsg, fatal: true, details: error });
     });
-    add('waiting', () => callbacks.onWaiting?.());
-    add('stalled', () => callbacks.onStalled?.());
+    add('waiting', () => pluginApi.events.callHook('plugin:waiting'));
+    add('stalled', () => pluginApi.events.callHook('plugin:stalled'));
     
     add('volumechange', () => {
-        callbacks.onVolumeChange?.({ volume: mediaEl.volume, isMuted: mediaEl.muted });
+        pluginApi.events.callHook('plugin:volumechange', { volume: mediaEl.volume, isMuted: mediaEl.muted });
     });
 
     this.mediaElement = mediaEl;
@@ -188,7 +181,7 @@ export class HtmlMediaPlugin implements PlayerPlugin {
       this.mediaElement = null;
     }
     this.currentContainer = null;
-    this.currentCallbacks = null;
+    this.pluginApi = null;
   }
 
   destroy(): void {
