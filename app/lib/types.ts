@@ -1,11 +1,10 @@
-// import type { Level as HlsJsLevel } from 'hls.js';
 import type { HookableCore } from './HookableCore';
 
 export interface MediaMetadata {
   title?: string;
   artist?: string;
   album?: string;
-  artwork?: string; // URL to image
+  artwork?: string;
 }
 
 export interface MediaSource {

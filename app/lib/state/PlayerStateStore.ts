@@ -27,10 +27,6 @@ const initialPlayerStateDefinition: Readonly<PlayerState> = {
   activePluginOptionId: null,
 };
 
-/**
- * Manages the state of the media player using a Zustand store.
- * Encapsulates state update logic via a declarative API.
- */
 export class PlayerStateStore {
   public store: StoreApi<PlayerState>;
   private _preMuteVolume: number;
@@ -44,7 +40,6 @@ export class PlayerStateStore {
       : (finalInitialState.volume > 0 ? finalInitialState.volume : 0.5);
   }
 
-  // --- Core Methods ---
   public getState = (): PlayerState => this.store.getState();
   
   public subscribe = (callback: StateSubscriber): Subscription => {
@@ -55,9 +50,7 @@ export class PlayerStateStore {
   
   public getPreMuteVolume = (): number => this._preMuteVolume;
   public setPreMuteVolume = (volume: number): void => { this._preMuteVolume = volume; }
-  
-  // --- State Action API ---
-  
+   
   public setPreferences = (prefs: Partial<PlayerPreferences>): void => {
     const currentPrefs = this.getState().preferences;
     this.store.setState({ preferences: { ...currentPrefs, ...prefs } });

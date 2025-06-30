@@ -22,21 +22,16 @@ export class MediaPlayer implements MediaPlayerPublicApi {
   public events: HookableCore;
 
   constructor(params: MediaPlayerParams) {
-    // 1. Initialize stateStore first, as other parts depend on it.
     this.stateStore = params.store || new PlayerStateStore(params.initialState);
 
-    // 2. Initialize hooks and event bus.
     this.hooks = new HookableCore();
     this.events = new HookableCore();
 
-    // 3. Setup listeners that connect the event bus to the state store.
     this._setupEventListeners();
 
-    // 4. Separate plugins into source handlers and feature plugins.
     this._sourcePlugins = [];
     this._featurePlugins = [];
     params.plugins.forEach(plugin => {
-        // Default to 'source' plugin if type is not specified
         if (plugin.type === 'feature') {
             this._featurePlugins.push(plugin);
         } else {
@@ -44,18 +39,14 @@ export class MediaPlayer implements MediaPlayerPublicApi {
         }
     });
 
-    // 5. Register all plugins, allowing them to hook into the player instance.
-    // Now they can safely call subscribe().
     params.plugins.forEach(plugin => {
         plugin.onRegister?.(this);
     });
 
-    // 6. Ensure preferences are set if not provided in initial state.
     if (!params.initialState?.preferences) {
       this.stateStore.setPreferences(DEFAULT_PREFERENCES);
     }
     
-    // 7. Finalize initialization.
     this.hooks.callHook('player:init', { instance: this }).catch(e => console.error("Error in player:init hook:", e));
   }
 
@@ -104,7 +95,6 @@ export class MediaPlayer implements MediaPlayerPublicApi {
   }
 
   public subscribe(callback: StateSubscriber): Subscription {
-    // The subscribe method on PlayerStateStore now handles invoking the callback immediately.
     return this.stateStore.subscribe(callback);
   }
 
@@ -404,7 +394,6 @@ export class MediaPlayer implements MediaPlayerPublicApi {
         this.stateStore.setError((error as Error).message);
       }
     } else {
-      // If no plugin handler, update state directly. The callback handles pre-mute logic.
       this.stateStore.setVolume({ volume: newVolume, isMuted: newMuted });
     }
   };

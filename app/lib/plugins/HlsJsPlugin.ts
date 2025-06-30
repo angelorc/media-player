@@ -1,12 +1,10 @@
 import Hls, { Events, ErrorTypes, ErrorDetails } from 'hls.js';
-// import type { Events, ErrorTypes, ErrorDetails } from 'hls.js';
 import type {
   HlsConfig,
   ErrorData,
   ManifestParsedData,
   LevelSwitchedData,
   Level as HlsJsLevel,
-  // Events, ErrorTypes, ErrorDetails
 } from 'hls.js';
 import type { PlayerPlugin, MediaSource, PluginLoadOptions, PluginMediaControlHandlers, PluginSelectableOption, PluginApi } from '../types';
 

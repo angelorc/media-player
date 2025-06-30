@@ -1,10 +1,5 @@
 import type { MediaPlayerPublicApi, PlayerPlugin, PlayerState, Subscription } from '../types';
 
-/**
- * A feature plugin that integrates the browser's Media Session API.
- * This plugin listens to the player's state and updates the media session
- * accordingly, enabling platform UI controls (like on lock screens or notifications).
- */
 export class MediaSessionPlugin implements PlayerPlugin {
   public readonly name = 'MediaSessionPlugin';
   public readonly type = 'feature';
@@ -13,11 +8,6 @@ export class MediaSessionPlugin implements PlayerPlugin {
   private subscription: Subscription | null = null;
   private lastSyncedTrackId: string | null = null;
 
-  /**
-   * Called when the plugin is registered with the MediaPlayer. This is the
-   * entry point for initializing the plugin and its listeners.
-   * @param player - The MediaPlayer instance to integrate with.
-   */
   public onRegister(player: MediaPlayerPublicApi): void {
     if (!('mediaSession' in navigator) || !window.MediaMetadata) {
       console.log('MediaSessionPlugin: Media Session API not supported.');
@@ -26,10 +16,8 @@ export class MediaSessionPlugin implements PlayerPlugin {
 
     this.player = player;
 
-    // Subscribe to player state changes to keep the media session in sync.
     this.subscription = this.player.subscribe(this.syncState.bind(this));
 
-    // Set up static action handlers that just delegate to the player.
     try {
       navigator.mediaSession.setActionHandler('play', () => { this.player?.play().catch(e => console.warn("MediaSession: play() action failed.", e)); });
       navigator.mediaSession.setActionHandler('pause', () => this.player?.pause());
@@ -39,16 +27,12 @@ export class MediaSessionPlugin implements PlayerPlugin {
     }
   }
 
-  /**
-   * Cleans up resources used by the plugin.
-   */
   public destroy(): void {
     this.subscription?.unsubscribe();
     this.subscription = null;
     this.player = null;
 
     if ('mediaSession' in navigator) {
-      // Clear metadata and handlers
       navigator.mediaSession.metadata = null;
       navigator.mediaSession.playbackState = 'none';
       navigator.mediaSession.setActionHandler('play', null);
@@ -65,11 +49,6 @@ export class MediaSessionPlugin implements PlayerPlugin {
     }
   }
 
-  /**
-   * Synchronizes the Media Session API with the current player state.
-   * This is the main entry point called on every state update.
-   * @param state - The current PlayerState.
-   */
   private syncState(state: PlayerState): void {
     if (!this.player || !('mediaSession' in navigator) || !window.MediaMetadata) {
       return;
@@ -83,31 +62,20 @@ export class MediaSessionPlugin implements PlayerPlugin {
 
   private createArtworkUrls(artwork: string): { src: string; sizes: string; type: string }[] {
     const sizes = [96, 128, 192, 256, 384, 512, 720, 1024];
-    // const formats = ['jpg', 'png'];
-    const formats = ['jpg']
-    return sizes.flatMap(size => 
-      formats.map(format => ({
-        src: `https://ipx.bitsong.io/f_${format},w_${size},h_${size}/${artwork}`,
-        sizes: `${size}x${size}`,
-        type: `image/${format}`
-      }))
-    );
+    return sizes.map(size => ({
+      src: `https://ipx.bitsong.io/f_jpg,w_${size},h_${size}/${artwork}`,
+      sizes: `${size}x${size}`,
+      type: 'image/jpg'
+    }));
   }
 
-  /**
-   * Updates the Media Session metadata (title, artist, artwork).
-   * @param state - The current PlayerState.
-   */
   private _syncMetadata(state: PlayerState): void {
     const { currentTrack } = state;
 
-    // Update metadata only when the track changes
     if (currentTrack && currentTrack.id !== this.lastSyncedTrackId) {
       this.lastSyncedTrackId = currentTrack.id;
       const metadata = currentTrack.metadata || {};
 
-      // --- TIMING FIX ---
-      // Explicitly clear position state on track change to prevent showing stale data.
       if ('setPositionState' in navigator.mediaSession) {
         navigator.mediaSession.setPositionState();
       }
@@ -123,7 +91,6 @@ export class MediaSessionPlugin implements PlayerPlugin {
         console.warn("MediaSessionPlugin: Failed to set media session metadata.", e);
       }
     } else if (!currentTrack && this.lastSyncedTrackId !== null) {
-      // Clear metadata when playback stops/queue ends
       navigator.mediaSession.metadata = null;
       this.lastSyncedTrackId = null;
       if ('setPositionState' in navigator.mediaSession) {
@@ -132,10 +99,6 @@ export class MediaSessionPlugin implements PlayerPlugin {
     }
   }
 
-  /**
-   * Updates the Media Session playback state (playing, paused).
-   * @param state - The current PlayerState.
-   */
   private _syncPlaybackState({ playbackState }: PlayerState): void {
     try {
       switch (playbackState) {
@@ -156,10 +119,6 @@ export class MediaSessionPlugin implements PlayerPlugin {
     }
   }
 
-  /**
-   * Updates the Media Session position state for scrubbing.
-   * @param state - The current PlayerState.
-   */
   private _syncPositionState(state: PlayerState): void {
     if (!('setPositionState' in navigator.mediaSession)) {
       return;
@@ -168,8 +127,6 @@ export class MediaSessionPlugin implements PlayerPlugin {
     const { duration, currentTime, currentTrack } = state;
     const hasValidDuration = duration > 0 && isFinite(duration);
 
-    // Only update position if we have a valid track and duration.
-    // The state is explicitly cleared on track change in _syncMetadata.
     if (currentTrack && hasValidDuration) {
       try {
         navigator.mediaSession.setPositionState({
@@ -183,10 +140,6 @@ export class MediaSessionPlugin implements PlayerPlugin {
     }
   }
 
-  /**
-   * Updates the Media Session action handlers (next, previous, seek).
-   * @param state - The current PlayerState.
-   */
   private _syncActionHandlers(state: PlayerState): void {
     const { queue, currentIndex, duration } = state;
     const hasValidDuration = duration > 0 && isFinite(duration);
