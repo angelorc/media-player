@@ -27,6 +27,11 @@ export const DEMO_TRACKS = [
                 "src": "https://media-storage-test.bitsong.io/0197c13c-be31-78cb-aeab-91df32fb3797/audio/opus/17715ea660637594115f19beabfeeef9.opus",
                 "format": "opus",
                 "mediaType": "audio"
+            },
+            {
+                "src": "https://media-storage-test.bitsong.io/0197c13c-be31-78cb-aeab-91df32fb3797/video/hls-video/master.m3u8",
+                "format": "hls",
+                "mediaType": "video"
             }
         ]
     },
@@ -182,6 +187,11 @@ export const DEMO_TRACKS = [
                 "src": "https://media-storage-test.bitsong.io/0197c14a-f27e-7f87-a954-6c20a5b9b8fa/audio/opus/93a6ae7796945748b6dc5bdc16888484.opus",
                 "format": "opus",
                 "mediaType": "audio"
+            },
+            {
+                "src": "https://media-storage-test.bitsong.io/0197c14a-f27e-7f87-a954-6c20a5b9b8fa/video/hls-video/master.m3u8",
+                "format": "hls",
+                "mediaType": "video"
             }
         ]
     },
@@ -244,6 +254,11 @@ export const DEMO_TRACKS = [
                 "src": "https://media-storage-test.bitsong.io/0197c146-a90a-726a-bb38-7a7d2d7fc6ae/audio/opus/81f3006d6dc17d8431d498cb919547ab.opus",
                 "format": "opus",
                 "mediaType": "audio"
+            },
+            {
+                "src": "https://media-storage-test.bitsong.io/0197c146-a90a-726a-bb38-7a7d2d7fc6ae/video/hls-video/master.m3u8",
+                "format": "hls",
+                "mediaType": "video"
             }
         ]
     },
@@ -275,6 +290,11 @@ export const DEMO_TRACKS = [
                 "src": "https://media-storage-test.bitsong.io/0197c140-80e0-7233-99ab-c113faf30b24/audio/opus/04dffc8f61b5db2b191357ffd577cf54.opus",
                 "format": "opus",
                 "mediaType": "audio"
+            },
+            {
+                "src": "https://media-storage-test.bitsong.io/0197c140-80e0-7233-99ab-c113faf30b24/video/hls-video/master.m3u8",
+                "format": "hls",
+                "mediaType": "video"
             }
         ]
     },
@@ -306,6 +326,11 @@ export const DEMO_TRACKS = [
                 "src": "https://media-storage-test.bitsong.io/0197c148-70e7-7657-9573-bb042f676ebc/audio/opus/a7d9078a61e7b33db1f86d5a02ef68a7.opus",
                 "format": "opus",
                 "mediaType": "audio"
+            },
+            {
+                "src": "https://media-storage-test.bitsong.io/0197c148-70e7-7657-9573-bb042f676ebc/video/hls-video/master.m3u8",
+                "format": "hls",
+                "mediaType": "video"
             }
         ]
     },
@@ -399,6 +424,11 @@ export const DEMO_TRACKS = [
                 "src": "https://media-storage-test.bitsong.io/0197c149-28e6-7a56-94b0-42ba53c851b4/audio/opus/12d74ec263da598e22aa75a7357a8953.opus",
                 "format": "opus",
                 "mediaType": "audio"
+            },
+            {
+                "src": "https://media-storage-test.bitsong.io/0197c149-28e6-7a56-94b0-42ba53c851b4/video/hls-video/master.m3u8",
+                "format": "hls",
+                "mediaType": "video"
             }
         ]
     },
@@ -430,6 +460,11 @@ export const DEMO_TRACKS = [
                 "src": "https://media-storage-test.bitsong.io/0197c14b-cece-7c9c-ac5c-646917a79b49/audio/opus/4cdd2824a3246c4b997de5fa4b56144b.opus",
                 "format": "opus",
                 "mediaType": "audio"
+            },
+            {
+                "src": "https://media-storage-test.bitsong.io/0197c14b-cece-7c9c-ac5c-646917a79b49/video/hls-video/master.m3u8",
+                "format": "hls",
+                "mediaType": "video"
             }
         ]
     },
@@ -585,6 +620,11 @@ export const DEMO_TRACKS = [
                 "src": "https://media-storage-test.bitsong.io/0197c156-1f0d-7361-911f-201e069bafb0/audio/opus/b271836e759346c7d29315b6206d6602.opus",
                 "format": "opus",
                 "mediaType": "audio"
+            },
+            {
+                "src": "https://media-storage-test.bitsong.io/0197c156-1f0d-7361-911f-201e069bafb0/video/hls-video/master.m3u8",
+                "format": "hls",
+                "mediaType": "video"
             }
         ]
     },
@@ -647,6 +687,11 @@ export const DEMO_TRACKS = [
                 "src": "https://media-storage-test.bitsong.io/0197c153-4209-76d0-8c8a-4792584523f0/audio/opus/77f86c870124ecbc0ed44d08d6e04283.opus",
                 "format": "opus",
                 "mediaType": "audio"
+            },
+            {
+                "src": "https://media-storage-test.bitsong.io/0197c153-4209-76d0-8c8a-4792584523f0/video/hls-video/master.m3u8",
+                "format": "hls",
+                "mediaType": "video"
             }
         ]
     },
@@ -709,6 +754,11 @@ export const DEMO_TRACKS = [
                 "src": "https://media-storage-test.bitsong.io/0197c150-55cf-7d20-8cf6-bf516525cba1/audio/opus/6832a709efa31e2664543311e42e8104.opus",
                 "format": "opus",
                 "mediaType": "audio"
+            },
+            {
+                "src": "https://media-storage-test.bitsong.io/0197c150-55cf-7d20-8cf6-bf516525cba1/video/hls-video/master.m3u8",
+                "format": "hls",
+                "mediaType": "video"
             }
         ]
     },
@@ -740,6 +790,11 @@ export const DEMO_TRACKS = [
                 "src": "https://media-storage-test.bitsong.io/0197c154-95e7-79a0-867b-95e3552ce39d/audio/opus/dcb75e9618c993091c984966e4f4a723.opus",
                 "format": "opus",
                 "mediaType": "audio"
+            },
+            {
+                "src": "https://media-storage-test.bitsong.io/0197c154-95e7-79a0-867b-95e3552ce39d/video/hls-video/master.m3u8",
+                "format": "hls",
+                "mediaType": "video"
             }
         ]
     },
@@ -771,6 +826,11 @@ export const DEMO_TRACKS = [
                 "src": "https://media-storage-test.bitsong.io/0197c151-40c5-71cd-bf60-f9874844f800/audio/opus/c3a988f4d600a82089c9f06bba13273d.opus",
                 "format": "opus",
                 "mediaType": "audio"
+            },
+            {
+                "src": "https://media-storage-test.bitsong.io/0197c151-40c5-71cd-bf60-f9874844f800/video/hls-video/master.m3u8",
+                "format": "hls",
+                "mediaType": "video"
             }
         ]
     },
@@ -802,6 +862,11 @@ export const DEMO_TRACKS = [
                 "src": "https://media-storage-test.bitsong.io/0197c158-851f-73d8-8c02-9157a5832a1c/audio/opus/f1130b583b47402110bfcd6a94df6d7e.opus",
                 "format": "opus",
                 "mediaType": "audio"
+            },
+            {
+                "src": "https://media-storage-test.bitsong.io/0197c158-851f-73d8-8c02-9157a5832a1c/video/hls-video/master.m3u8",
+                "format": "hls",
+                "mediaType": "video"
             }
         ]
     },
@@ -833,6 +898,11 @@ export const DEMO_TRACKS = [
                 "src": "https://media-storage-test.bitsong.io/0197c152-6782-7f3c-b679-8f2d8bdcad5b/audio/opus/e8001ca69599efc3a8073c089db5f7a0.opus",
                 "format": "opus",
                 "mediaType": "audio"
+            },
+            {
+                "src": "https://media-storage-test.bitsong.io/0197c152-6782-7f3c-b679-8f2d8bdcad5b/video/hls-video/master.m3u8",
+                "format": "hls",
+                "mediaType": "video"
             }
         ]
     },
@@ -895,6 +965,11 @@ export const DEMO_TRACKS = [
                 "src": "https://media-storage-test.bitsong.io/0197c159-dc7b-7b82-81aa-7ed569b38c92/audio/opus/462035401f1cdc99705a2db312f5c43e.opus",
                 "format": "opus",
                 "mediaType": "audio"
+            },
+            {
+                "src": "https://media-storage-test.bitsong.io/0197c159-dc7b-7b82-81aa-7ed569b38c92/video/hls-video/master.m3u8",
+                "format": "hls",
+                "mediaType": "video"
             }
         ]
     },
@@ -988,6 +1063,11 @@ export const DEMO_TRACKS = [
                 "src": "https://media-storage-test.bitsong.io/0197c15b-6639-7bcc-96d1-4c7ad9ed70dd/audio/opus/f992b0f42eadfdc394b935f6c2176c53.opus",
                 "format": "opus",
                 "mediaType": "audio"
+            },
+            {
+                "src": "https://media-storage-test.bitsong.io/0197c15b-6639-7bcc-96d1-4c7ad9ed70dd/video/hls-video/master.m3u8",
+                "format": "hls",
+                "mediaType": "video"
             }
         ]
     },
@@ -1050,6 +1130,11 @@ export const DEMO_TRACKS = [
                 "src": "https://media-storage-test.bitsong.io/0197c15c-0ae2-771b-9b82-cec22a13e24a/audio/opus/54d0eef080b94827ed9ba56538fb9632.opus",
                 "format": "opus",
                 "mediaType": "audio"
+            },
+            {
+                "src": "https://media-storage-test.bitsong.io/0197c15c-0ae2-771b-9b82-cec22a13e24a/video/hls-video/master.m3u8",
+                "format": "hls",
+                "mediaType": "video"
             }
         ]
     },
@@ -1205,6 +1290,11 @@ export const DEMO_TRACKS = [
                 "src": "https://media-storage-test.bitsong.io/0197c15f-0c34-7cb5-9b5f-4af47cebd79b/audio/opus/488e5c2c9b84ba0089939acbde9eb077.opus",
                 "format": "opus",
                 "mediaType": "audio"
+            },
+            {
+                "src": "https://media-storage-test.bitsong.io/0197c15f-0c34-7cb5-9b5f-4af47cebd79b/video/hls-video/master.m3u8",
+                "format": "hls",
+                "mediaType": "video"
             }
         ]
     },
@@ -1236,6 +1326,11 @@ export const DEMO_TRACKS = [
                 "src": "https://media-storage-test.bitsong.io/0197c160-08bf-7d37-9b74-5cb8a9553963/audio/opus/dc537e02430539e91494380a99948911.opus",
                 "format": "opus",
                 "mediaType": "audio"
+            },
+            {
+                "src": "https://media-storage-test.bitsong.io/0197c160-08bf-7d37-9b74-5cb8a9553963/video/hls-video/master.m3u8",
+                "format": "hls",
+                "mediaType": "video"
             }
         ]
     },
@@ -1298,6 +1393,11 @@ export const DEMO_TRACKS = [
                 "src": "https://media-storage-test.bitsong.io/0197c163-0852-7a01-8f4f-f1364e526a82/audio/opus/467cfb196f8f7d963174b0298625cfbb.opus",
                 "format": "opus",
                 "mediaType": "audio"
+            },
+            {
+                "src": "https://media-storage-test.bitsong.io/0197c163-0852-7a01-8f4f-f1364e526a82/video/hls-video/master.m3u8",
+                "format": "hls",
+                "mediaType": "video"
             }
         ]
     },
@@ -1515,6 +1615,11 @@ export const DEMO_TRACKS = [
                 "src": "https://media-storage-test.bitsong.io/0197c16c-708b-7f2a-bf08-c4f18b5cd927/audio/opus/641fa5522ebdea33fd3f04ec6c898e37.opus",
                 "format": "opus",
                 "mediaType": "audio"
+            },
+            {
+                "src": "https://media-storage-test.bitsong.io/0197c16c-708b-7f2a-bf08-c4f18b5cd927/video/hls-video/master.m3u8",
+                "format": "hls",
+                "mediaType": "video"
             }
         ]
     },
@@ -1608,6 +1713,11 @@ export const DEMO_TRACKS = [
                 "src": "https://media-storage-test.bitsong.io/0197c16e-96bd-7c34-8774-e7bed1dfbe08/audio/opus/f2f5a218d6b08a3a08cca75ebdfeabda.opus",
                 "format": "opus",
                 "mediaType": "audio"
+            },
+            {
+                "src": "https://media-storage-test.bitsong.io/0197c16e-96bd-7c34-8774-e7bed1dfbe08/video/hls-video/master.m3u8",
+                "format": "hls",
+                "mediaType": "video"
             }
         ]
     },
