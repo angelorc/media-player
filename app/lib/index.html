@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BitSong Media Player Core Test</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji"; background-color: #f0f2f5; color: #1c1e21; padding: 20px; }
+        .player-wrapper { max-width: 800px; margin: 0 auto; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        #player-container { width: 100%; height: auto; min-height: 360px; background: #000; border-radius: 6px; margin-bottom: 15px; }
+        .controls, .status, .actions, .quality-selector { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+        .status-item { background: #e7f3ff; color: #1877f2; padding: 5px 10px; border-radius: 15px; font-size: 14px; }
+        button { background-color: #1877f2; color: white; border: none; border-radius: 6px; padding: 10px 15px; font-size: 14px; font-weight: bold; cursor: pointer; transition: background-color 0.2s; }
+        button:hover { background-color: #166fe5; }
+        button:disabled { background-color: #a0a0a0; cursor: not-allowed; }
+        .quality-btn { background-color: #e4e6eb; color: #050505; }
+        .quality-btn.active { background-color: #31a24c; color: white; }
+        label { font-weight: bold; }
+        input[type="range"] { flex-grow: 1; }
+    </style>
+</head>
+<body>
+
+<div class="player-wrapper">
+    <h1>BitSong Media Player Core Test</h1>
+    
+    <!-- The player will attach its <video> element here -->
+    <div id="player-container"></div>
+
+    <!-- STATUS DISPLAY -->
+    <div class="status">
+        <label>Status:</label>
+        <span id="source-display" class="status-item">Source: None</span>
+        <span id="mode-display" class="status-item">Mode: video</span>
+        <span id="time-display" class="status-item">00:00 / 00:00</span>
+        <span id="state-display" class="status-item">Idle</span>
+    </div>
+
+    <!-- PLAYBACK CONTROLS -->
+    <div class="controls">
+        <label>Controls:</label>
+        <button id="play-pause-btn">Play</button>
+        <button id="prev-btn">Previous</button>
+        <button id="next-btn">Next</button>
+        <button id="mute-btn">Mute</button>
+        <label for="volume-slider">Volume:</label>
+        <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="1">
+    </div>
+    
+    <!-- QUALITY SELECTOR -->
+    <div class="quality-selector">
+        <label>Quality:</label>
+        <div id="quality-list">
+            <!-- Quality buttons will be dynamically inserted here -->
+            <button class="quality-btn" disabled>N/A</button>
+        </div>
+    </div>
+
+    <!-- ACTIONS -->
+    <div class="actions">
+        <label>Actions:</label>
+        <button id="load-video-btn">Load Single Video</button>
+        <button id="load-audio-btn">Load Single Audio</button>
+        <button id="load-queue-btn">Load Mixed Queue</button>
+        <button id="switch-mode-btn">Switch to Audio Mode</button>
+    </div>
+</div>
+
+<script type="module">
+    // We assume the compiled JS files are accessible from this path.
+    // In a real project, you'd import from '@bitsong/player-core'.
+    import { Player } from './player.ts';
+    import { NativeVideoProvider } from './providers/htmlvideo.ts';
+    import { NativeAudioProvider } from './providers/htmlaudio.ts';
+
+    // --- DOM Elements ---
+    const container = document.getElementById('player-container');
+    const playPauseBtn = document.getElementById('play-pause-btn');
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+    const muteBtn = document.getElementById('mute-btn');
+    const volumeSlider = document.getElementById('volume-slider');
+    const timeDisplay = document.getElementById('time-display');
+    const sourceDisplay = document.getElementById('source-display');
+    const modeDisplay = document.getElementById('mode-display');
+    const stateDisplay = document.getElementById('state-display');
+    const qualityListDiv = document.getElementById('quality-list');
+    const loadVideoBtn = document.getElementById('load-video-btn');
+    const loadAudioBtn = document.getElementById('load-audio-btn');
+    const loadQueueBtn = document.getElementById('load-queue-btn');
+    const switchModeBtn = document.getElementById('switch-mode-btn');
+
+    // --- Sample Media ---
+    const BIG_BUCK_BUNNY_VIDEO = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+    const ELEPHANTS_DREAM_VIDEO = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4';
+    const TEST_AUDIO = 'https://cdn.jsdelivr.net/gh/k-next/svara-player-test-files/files/audio.mp3';
+
+    // --- Player Initialization ---
+    const player = new Player({
+        container,
+        providers: [NativeAudioProvider, NativeVideoProvider], // Register all our providers
+    });
+
+    // --- Event Listeners for Player Controls ---
+    playPauseBtn.addEventListener('click', () => {
+        const { isPlaying } = player.context.store.getState();
+        if (isPlaying) player.pause();
+        else player.play();
+    });
+
+    nextBtn.addEventListener('click', () => player.next());
+    prevBtn.addEventListener('click', () => player.previous());
+    muteBtn.addEventListener('click', () => {
+        const { isMuted } = player.context.store.getState();
+        player.setMuted(!isMuted);
+    });
+    volumeSlider.addEventListener('input', (e) => {
+        player.setVolume(parseFloat(e.target.value));
+    });
+
+    // --- Event Listeners for Loading Content ---
+    loadVideoBtn.addEventListener('click', () => player.load(BIG_BUCK_BUNNY_VIDEO));
+    loadAudioBtn.addEventListener('click', () => player.load(TEST_AUDIO));
+    loadQueueBtn.addEventListener('click', () => player.load([
+        ELEPHANTS_DREAM_VIDEO,
+        TEST_AUDIO,
+        BIG_BUCK_BUNNY_VIDEO,
+    ]));
+    switchModeBtn.addEventListener('click', () => {
+        const { displayMode } = player.context.store.getState();
+        const newMode = displayMode === 'video' ? 'audio' : 'video';
+        player.setMode(newMode);
+    });
+
+    // --- Main UI Update Logic via Store Subscription ---
+    player.context.store.subscribe((state, prevState) => {
+        // Playback State
+        playPauseBtn.textContent = state.isPlaying ? 'Pause' : 'Play';
+        stateDisplay.textContent = state.isBuffering ? 'Buffering...' : (state.isPlaying ? 'Playing' : 'Paused');
+        
+        // Mute & Volume State
+        muteBtn.textContent = state.isMuted ? 'Unmute' : 'Mute';
+        if (document.activeElement !== volumeSlider) {
+            volumeSlider.value = state.volume;
+        }
+
+        // Time Display
+        const formatTime = (seconds) => {
+            if (isNaN(seconds) || seconds === 0) return '00:00';
+            const date = new Date(seconds * 1000);
+            const hh = date.getUTCHours();
+            const mm = date.getUTCMinutes();
+            const ss = date.getUTCSeconds().toString().padStart(2, '0');
+            if (hh) {
+                return `${hh}:${mm.toString().padStart(2, '0')}:${ss}`;
+            }
+            return `${mm}:${ss}`;
+        };
+        timeDisplay.textContent = `${formatTime(state.currentTime)} / ${formatTime(state.duration)}`;
+
+        // Source & Mode Display
+        sourceDisplay.textContent = `Source: ${state.source?.split('/').pop() ?? 'None'}`;
+        modeDisplay.textContent = `Mode: ${state.displayMode}`;
+        switchModeBtn.textContent = `Switch to ${state.displayMode === 'video' ? 'Audio' : 'Video'} Mode`;
+
+        // Queue Buttons
+        prevBtn.disabled = state.currentIndex <= 0;
+        nextBtn.disabled = state.currentIndex < 0 || state.currentIndex >= state.queue.length - 1;
+
+        // Quality Selector (only redraw if qualities list has changed)
+        if (state.qualities !== prevState.qualities) {
+            qualityListDiv.innerHTML = ''; // Clear previous buttons
+            if (state.qualities.length > 0) {
+                state.qualities.forEach((level, index) => {
+                    const btn = document.createElement('button');
+                    btn.className = 'quality-btn';
+                    btn.textContent = level.label;
+                    btn.onclick = () => player.setQuality(index);
+                    qualityListDiv.appendChild(btn);
+                });
+            } else {
+                qualityListDiv.innerHTML = '<button class="quality-btn" disabled>N/A</button>';
+            }
+        }
+        
+        // Highlight active quality
+        document.querySelectorAll('.quality-btn').forEach((btn, index) => {
+            if (index === state.currentQualityIndex) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+    });
+
+    // --- Initial Load ---
+    console.log("Player initialized. Loading initial video.");
+    player.load(BIG_BUCK_BUNNY_VIDEO);
+
+</script>
+
+</body>
+</html>

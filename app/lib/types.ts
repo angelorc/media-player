@@ -1,167 +1,137 @@
-import type { HookableCore } from './HookableCore';
+import type { StoreApi } from 'zustand/vanilla';
+import type { PlayerError } from './errors';
 
-export interface MediaMetadata {
-  title?: string;
-  artist?: string;
-  album?: string;
-  artwork?: string;
-}
-
-export interface MediaSource {
-  src: string;
-  format: string; // e.g., 'hls', 'mp4', 'mp3', 'youtube'
-  mediaType: 'audio' | 'video'; // Helps determine which element to use
-  quality?: string; // User-facing label for this source, e.g., '1080p', 'MP3', 'HLS Stream'
-}
-
-export interface MediaTrack {
-  id: string;
-  sources: MediaSource[];
-  metadata?: MediaMetadata;
-  duration?: number; // in seconds, optional, can be fetched from metadata
-}
-
-export type PlaybackState = 'IDLE' | 'LOADING' | 'PLAYING' | 'PAUSED' | 'ENDED' | 'ERROR' | 'STALLED';
-
-export interface PlayerPreferences {
-  mediaType: Array<'video' | 'audio'>; // Preferred order
-  formats: string[]; // Preferred order of formats
-  autoplay?: boolean;
-}
-
-// Represents an option reported by a plugin (e.g., HLS quality level)
-export interface PluginSelectableOption {
-  id: string; // Plugin-defined ID for the option (e.g., 'auto', 'level_0')
-  label: string; // User-friendly label (e.g., "Auto", "720p (1.2 Mbps)")
-}
-
-export interface PlayerState {
-  playbackState: PlaybackState;
-  isLoading: boolean;
-  isPlaying: boolean;
-  isMuted: boolean;
-  currentTrack: MediaTrack | null;
-  activeSource: MediaSource | null; // The fundamental MediaSource being played
-  currentIndex: number;
-  queue: MediaTrack[];
-  currentTime: number;
-  duration: number;
-  volume: number;
-  error: string | null;
-  preferences: PlayerPreferences;
-  activePluginName: string | null;
-
-  // Generic plugin-selectable options and active selection
-  pluginOptions?: PluginSelectableOption[];
-  activePluginOptionId?: string | null;
-}
-
-export interface StateSubscriber {
-  (state: PlayerState): void;
-}
-
-export interface Subscription {
-  unsubscribe: () => void;
+/**
+ * The configuration object provided when creating a new Player instance.
+ */
+export interface PlayerOptions {
+  /** The container element where the media element will be attached. */
+  container: HTMLElement;
+  /** An array of provider classes to be used by the player. */
+  providers: IProviderConstructor[];
+  /** The initial source URL to load. */
+  source?: string;
 }
 
 /**
- * Defines the API exposed to plugins, providing access to the player's
- * lifecycle hooks and the event bus for communication back to the core.
+ * The central context object, passed to all modules (providers, plugins).
+ * It's the nervous system of the player.
  */
-export interface PluginApi {
-  hooks: HookableCore; // The player's lifecycle hooks. Plugins can listen to these.
-  events: HookableCore; // The event bus for plugin->core communication. Plugins emit events here.
+export interface PlayerContext {
+  store: StoreApi<PlayerStore>;
+  events: PlayerEventBus;
+  player: import('./player').Player; // Use import() for type-only circular refs
+  providers: import('./providers/manager').ProviderManager;
 }
 
+// --- STORE ---
 
-export interface PluginLoadOptions {
-  containerElement: HTMLElement;
-  initialVolume: number;
-  initialMute: boolean;
-  autoplay: boolean;
-}
-
-export interface PluginMediaControlHandlers {
-  play: () => Promise<void>;
-  pause: () => void;
-  stop?: () => void;
-  seek: (time: number) => void;
-  setVolume?: (volume: number, isMuted: boolean) => void;
-  getHTMLElement?: () => HTMLElement | null;
-  setPlaybackRate?: (rate: number) => void;
-  // Generic handler for plugins to change their internal selectable option
-  setPluginOption?: (optionId: string) => Promise<void>;
-}
-
-
-export interface MediaPlayerPublicApi {
-    hooks: HookableCore;
-    events: HookableCore;
-    subscribe(callback: StateSubscriber): Subscription;
-    getState(): PlayerState;
-    loadQueue(tracks: MediaTrack[], containerElement: HTMLElement, startIndex?: number, playImmediately?: boolean): void;
-    addToQueue(track: MediaTrack): void;
-    play(): Promise<void>;
-    pause(): void;
-    stop(): Promise<void>;
-    next(): void;
-    previous(): void;
-    jumpTo(index: number): void;
-    seek(time: number): void;
-    setVolume(volume: number): void;
-    toggleMute(): void;
-    setPlayerContainer(container: HTMLElement | null): void;
-    getActiveHTMLElement(): HTMLElement | null;
-    destroy(): Promise<void>;
-    setPreferences(prefs: Partial<PlayerPreferences>): void;
-    setActiveSource(newSource: MediaSource): Promise<void>;
-    setPluginOption(optionId: string): Promise<void>;
-}
-
-export interface PlayerPlugin {
-  name: string;
-  /**
-   * Defines the plugin type.
-   * 'source' plugins handle media playback for specific formats (e.g., HLS, MP4).
-   * 'feature' plugins add functionality across the player (e.g., MediaSession, analytics).
-   * Defaults to 'source' if not specified.
-   */
-  type?: 'source' | 'feature';
-
-  /**
-   * Called when the plugin is registered with the MediaPlayer instance.
-   * This is the entry point for feature plugins.
-   * @param player - The public API of the media player.
-   */
-  onRegister?(player: MediaPlayerPublicApi): void;
+/**
+ * The complete state managed by Zustand. Organized into slices.
+ */
+export interface StoreState {
+  // Media Slice: Core properties of the currently loaded media
+  source: string | null;
+  duration: number;
+  isReady: boolean;
+  error: PlayerError | null;
   
-  /**
-   * (For 'source' plugins) Checks if the plugin can handle the given media source.
-   * @param source - The media source to check.
-   * @returns `true` if the source is supported, otherwise `false`.
-   */
-  isTypeSupported?(source: MediaSource): boolean;
+  // Playback Slice: State that changes frequently during playback
+  isPlaying: boolean;
+  isBuffering: boolean;
+  isMuted: boolean;
+  isEnded: boolean;
+  currentTime: number;
+  buffered: number; // Time in seconds
+  
+  // Properties Slice: User-adjustable media properties
+  volume: number; // From 0 to 1
+  playbackRate: number;
 
-  /**
-   * (For 'source' plugins) Loads a media source for playback.
-   * @param source - The media source to load.
-   * @param pluginApi - Provides access to player lifecycle hooks and event bus.
-   * @param options - Loading options like container element and autoplay settings.
-   * @returns A promise that resolves with media control handlers.
-   */
-  load?(
-    source: MediaSource,
-    pluginApi: PluginApi,
-    options: PluginLoadOptions
-  ): Promise<PluginMediaControlHandlers | void>;
+  queue: string[];
+  currentIndex: number;
+}
 
-  /**
-   * (For 'source' plugins) Called when the track handled by this plugin is being unloaded.
-   */
-  onTrackUnload?(): void;
+/**
+ * Actions that can be dispatched to modify the store's state.
+ */
+export interface StoreActions {
+  // Actions are namespaced by their slice for clarity.
+  media: {
+    setSource: (source: string) => void;
+    setDuration: (duration: number) => void;
+    setIsReady: (isReady: boolean) => void;
+    setError: (error: PlayerError | null) => void;
+    reset: () => void;
+  };
+  playback: {
+    setIsPlaying: (isPlaying: boolean) => void;
+    setIsBuffering: (isBuffering: boolean) => void;
+    setIsMuted: (isMuted: boolean) => void;
+    setIsEnded: (isEnded: boolean) => void;
+    setCurrentTime: (time: number) => void;
+    setBuffered: (buffered: number) => void;
+  };
+  properties: {
+    setVolume: (volume: number) => void;
+    setPlaybackRate: (rate: number) => void;
+  };
+  queue: {
+    set: (sources: string[]) => void;
+    add: (sources: string[]) => void;
+    remove: (index: number) => void;
+    clear: () => void;
+    goNext: () => number;
+    goPrevious: () => number;
+    jumpTo: (index: number) => void;
+  };
+}
 
-  /**
-   * Called when the MediaPlayer is being destroyed. The plugin should clean up all its resources.
-   */
+/** The combined Zustand store interface. */
+export type PlayerStore = StoreState & { actions: StoreActions };
+
+// --- PROVIDERS ---
+
+/**
+ * The interface that every media provider (Native Video, HLS, YouTube) must implement.
+ * This is the contract that ensures providers are interchangeable.
+ */
+export interface IProvider {
+  /** A method to check if this provider can play a given source. */
+  canPlay(source: string): boolean;
+  /** Loads the media source. */
+  load(source: string): void;
+  /** Destroys the provider instance, cleaning up elements and event listeners. */
   destroy(): void;
+
+  // Media Controls
+  play(): void;
+  pause(): void;
+  seek(time: number): void;
+  setVolume(volume: number): void;
+  setMuted(muted: boolean): void;
+  setPlaybackRate(rate: number): void;
+}
+
+/** Represents a class that can be instantiated to create an IProvider. */
+export interface IProviderConstructor {
+  new (context: PlayerContext, container: HTMLElement): IProvider;
+}
+
+// --- EVENTS ---
+
+/** A map of all possible events the player can emit. */
+export interface PlayerEventMap {
+  'source:change': { newSource: string };
+  'state:change': { state: Partial<StoreState> };
+  'error': { error: PlayerError };
+  // eslint-disable-next-line @typescript-eslint/no-invalid-void-type
+  'destroy': void;
+}
+
+/** The type for the event bus, our simple pub/sub system. */
+export interface PlayerEventBus {
+  on<K extends keyof PlayerEventMap>(event: K, callback: (payload: PlayerEventMap[K]) => void): void;
+  off<K extends keyof PlayerEventMap>(event: K, callback: (payload: PlayerEventMap[K]) => void): void;
+  emit<K extends keyof PlayerEventMap>(event: K, payload: PlayerEventMap[K]): void;
 }
