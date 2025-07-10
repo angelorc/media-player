@@ -60,7 +60,7 @@ export class HlsJsPlugin implements PlayerPlugin {
             console.error('HlsPlugin: Loading timed out.');
             cleanupInitialListeners();
             reject(new Error('HLS loading timed out.'));
-        }, 15000); // 15 seconds timeout
+        }, 5000); // 5 seconds timeout
     
         this.stateStore = stateStore;
         this.currentContainer = options.containerElement;

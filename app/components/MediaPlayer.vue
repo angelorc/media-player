@@ -29,46 +29,48 @@ const filterTracksByPreferences = (tracks, preferences) => {
   return tracks;
 };
 
-const reloadTracksWithPreferences = () => {
-  if (!$mediaPlayer) return;
+// const reloadTracksWithPreferences = () => {
+//   if (!$mediaPlayer) return;
   
-  const currentState = $mediaPlayer.getState();
-  const preferences = currentState.preferences;
-  const filteredTracks = filterTracksByPreferences(DEMO_TRACKS, preferences);
+//   const currentState = $mediaPlayer.getState();
+//   const preferences = currentState.preferences;
+//   const filteredTracks = filterTracksByPreferences(DEMO_TRACKS, preferences);
   
-  let newStartIndex = 0;
-  if (currentState.currentTrack) {
-    const currentTrackIndex = filteredTracks.findIndex(track => track.id === currentState.currentTrack.id);
-    if (currentTrackIndex >= 0) {
-      newStartIndex = currentTrackIndex;
-    }
-  }
+//   let newStartIndex = 0;
+//   if (currentState.currentTrack) {
+//     const currentTrackIndex = filteredTracks.findIndex(track => track.id === currentState.currentTrack.id);
+//     if (currentTrackIndex >= 0) {
+//       newStartIndex = currentTrackIndex;
+//     }
+//   }
   
-  if (mediaContainerRef.value) {
-    $mediaPlayer.loadQueue(filteredTracks, mediaContainerRef.value, newStartIndex, currentState.isPlaying);
-  }
-};
+//   if (mediaContainerRef.value) {
+//     console.log(`Reloading tracks with preferences: ${JSON.stringify(preferences)}`);
+//     $mediaPlayer.loadQueue(filteredTracks, mediaContainerRef.value, newStartIndex, currentState.isPlaying);
+//   }
+// };
 
 onMounted(() => {
-  $mediaPlayer.subscribe((state) => {
-    if (state.preferences) {
-      const filteredTracks = filterTracksByPreferences(DEMO_TRACKS, state.preferences);
+  // $mediaPlayer.subscribe((state) => {
+  //   if (state.preferences) {
+  //     const filteredTracks = filterTracksByPreferences(DEMO_TRACKS, state.preferences);
       
-      if (JSON.stringify(filteredTracks.map(t => t.id)) !== JSON.stringify(state.queue.map(t => t.id))) {
-        setTimeout(() => reloadTracksWithPreferences(), 0);
-      }
-    }
-  });
+  //     if (JSON.stringify(filteredTracks.map(t => t.id)) !== JSON.stringify(state.queue.map(t => t.id))) {
+  //       setTimeout(() => reloadTracksWithPreferences(), 0);
+  //     }
+  //   }
+  // });
 
   const initialFilteredTracks = filterTracksByPreferences(DEMO_TRACKS, $mediaPlayer.getState().preferences);
   if (mediaContainerRef.value) {
+    console.log(`Initializing MediaPlayer with tracks: ${JSON.stringify(initialFilteredTracks.map(t => t.id))}`);
     $mediaPlayer.loadQueue(initialFilteredTracks, mediaContainerRef.value);
   }
   isReady.value = true;
+});
 
-  onUnmounted(() => {
-    $mediaPlayer.destroy();
-  });
+onUnmounted(() => {
+  $mediaPlayer.destroy();
 });
 </script>
 

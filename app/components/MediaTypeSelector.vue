@@ -46,7 +46,7 @@ const toggleMediaType = () => {
     class="flex items-center gap-2"
     :aria-label="buttonText"
     :title="buttonText"
-    :disabled="!hasVideoSource && isVideoMode"
+    :disabled="!hasVideoSource"
   >
     <component :is="buttonIcon" class="h-4 w-4" />
   </Button>
