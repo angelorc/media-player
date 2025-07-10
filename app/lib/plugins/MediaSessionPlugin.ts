@@ -1,5 +1,10 @@
-import type { MediaPlayerPublicApi, PlayerPlugin, PlayerState, Subscription } from '../types';
+import type { MediaPlayerPublicApi, PlayerPlugin, PlayerState, PlaybackState, Subscription } from '../types';
 
+/**
+ * A feature plugin that integrates the browser's Media Session API.
+ * This plugin listens to the player's state and updates the media session
+ * accordingly, enabling platform UI controls (like on lock screens or notifications).
+ */
 export class MediaSessionPlugin implements PlayerPlugin {
   public readonly name = 'MediaSessionPlugin';
   public readonly type = 'feature';
@@ -7,7 +12,13 @@ export class MediaSessionPlugin implements PlayerPlugin {
   private player: MediaPlayerPublicApi | null = null;
   private subscription: Subscription | null = null;
   private lastSyncedTrackId: string | null = null;
+  private lastPlaybackState: PlaybackState = 'IDLE';
 
+  /**
+   * Called when the plugin is registered with the MediaPlayer. This is the
+   * entry point for initializing the plugin and its listeners.
+   * @param player - The MediaPlayer instance to integrate with.
+   */
   public onRegister(player: MediaPlayerPublicApi): void {
     if (!('mediaSession' in navigator) || !window.MediaMetadata) {
       console.log('MediaSessionPlugin: Media Session API not supported.');
@@ -16,8 +27,14 @@ export class MediaSessionPlugin implements PlayerPlugin {
 
     this.player = player;
 
+    // Initialize with the current state
+    const initialState = this.player.getState();
+    this.lastPlaybackState = initialState.playbackState;
+
+    // Subscribe to player state changes to keep the media session in sync.
     this.subscription = this.player.subscribe(this.syncState.bind(this));
 
+    // Set up static action handlers that just delegate to the player.
     try {
       navigator.mediaSession.setActionHandler('play', () => { this.player?.play().catch(e => console.warn("MediaSession: play() action failed.", e)); });
       navigator.mediaSession.setActionHandler('pause', () => this.player?.pause());
@@ -27,12 +44,16 @@ export class MediaSessionPlugin implements PlayerPlugin {
     }
   }
 
+  /**
+   * Cleans up resources used by the plugin.
+   */
   public destroy(): void {
     this.subscription?.unsubscribe();
     this.subscription = null;
     this.player = null;
 
     if ('mediaSession' in navigator) {
+      // Clear metadata and handlers
       navigator.mediaSession.metadata = null;
       navigator.mediaSession.playbackState = 'none';
       navigator.mediaSession.setActionHandler('play', null);
@@ -44,106 +65,100 @@ export class MediaSessionPlugin implements PlayerPlugin {
       navigator.mediaSession.setActionHandler('seekforward', null);
       navigator.mediaSession.setActionHandler('seekto', null);
       if ('setPositionState' in navigator.mediaSession) {
-        navigator.mediaSession.setPositionState();
+        navigator.mediaSession.setPositionState(undefined);
       }
     }
   }
 
+  /**
+   * Synchronizes the Media Session API with the current player state.
+   * This is called on every state update from the player.
+   * @param state - The current PlayerState.
+   */
   private syncState(state: PlayerState): void {
     if (!this.player || !('mediaSession' in navigator) || !window.MediaMetadata) {
       return;
     }
 
-    this._syncMetadata(state);
-    this._syncPlaybackState(state);
-    this._syncPositionState(state);
-    this._syncActionHandlers(state);
-  }
+    const { currentTrack, playbackState, isPlaying, duration, currentTime, queue, currentIndex } = state;
 
-  private createArtworkUrls(artwork: string): { src: string; sizes: string; type: string }[] {
-    const sizes = [96, 128, 192, 256, 384, 512, 720, 1024];
-    return sizes.map(size => ({
-      src: `https://ipx.bitsong.io/f_jpg,w_${size},h_${size}/${artwork}`,
-      sizes: `${size}x${size}`,
-      type: 'image/jpg'
-    }));
-  }
+    const trackChanged = currentTrack && currentTrack.id !== this.lastSyncedTrackId;
+    const justStartedPlaying = playbackState === 'PLAYING' && this.lastPlaybackState !== 'PLAYING';
 
-  private _syncMetadata(state: PlayerState): void {
-    const { currentTrack } = state;
-
-    if (currentTrack && currentTrack.id !== this.lastSyncedTrackId) {
-      this.lastSyncedTrackId = currentTrack.id;
+    // Update metadata if the track changes OR if we just (re)started playing.
+    // This ensures a stale session (e.g., from a backgrounded tab) gets refreshed.
+    if (currentTrack && (trackChanged || justStartedPlaying)) {
       const metadata = currentTrack.metadata || {};
-
-      if ('setPositionState' in navigator.mediaSession) {
-        navigator.mediaSession.setPositionState();
-      }
+      const artwork = metadata.artwork ? [{ src: metadata.artwork, sizes: '512x512', type: 'image/jpeg' }] : [];
 
       try {
         navigator.mediaSession.metadata = new window.MediaMetadata({
           title: metadata.title || 'Untitled Track',
           artist: metadata.artist || 'Unknown Artist',
-          album: 'on BitSong',
-          artwork: metadata.artwork ? this.createArtworkUrls(metadata.artwork) : []
+          album: metadata.album || 'Unknown Album',
+          artwork
         });
+        this.lastSyncedTrackId = currentTrack.id;
       } catch (e) {
-        console.warn("MediaSessionPlugin: Failed to set media session metadata.", e);
+        console.warn("MediaSessionPlugin: Could not set media session metadata:", e);
       }
     } else if (!currentTrack && this.lastSyncedTrackId !== null) {
       navigator.mediaSession.metadata = null;
       this.lastSyncedTrackId = null;
-      if ('setPositionState' in navigator.mediaSession) {
-        navigator.mediaSession.setPositionState();
-      }
     }
-  }
 
-  private _syncPlaybackState({ playbackState }: PlayerState): void {
+    // Store the current state for the next comparison
+    this.lastPlaybackState = playbackState;
+
+    // Set playback state first
+    let sessionPlaybackState: MediaSessionPlaybackState = 'none';
+    switch (playbackState) {
+      case 'PLAYING':
+        sessionPlaybackState = 'playing';
+        break;
+      case 'PAUSED':
+      case 'IDLE':
+      case 'ENDED':
+        sessionPlaybackState = 'paused';
+        break;
+      // For LOADING, ERROR, STALLED, it can be considered paused or none. Let's stick with paused for consistency.
+      // A loading state shouldn't show as playing.
+      case 'LOADING':
+      case 'STALLED':
+      case 'ERROR':
+        sessionPlaybackState = 'paused';
+        break;
+    }
     try {
-      switch (playbackState) {
-        case 'PLAYING':
-          navigator.mediaSession.playbackState = 'playing';
-          break;
-        case 'PAUSED':
-        case 'IDLE':
-        case 'ENDED':
-          navigator.mediaSession.playbackState = 'paused';
-          break;
-        default:
-          navigator.mediaSession.playbackState = 'none';
-          break;
+      // Avoid redundant sets if the state is already correct
+      if (navigator.mediaSession.playbackState !== sessionPlaybackState) {
+        navigator.mediaSession.playbackState = sessionPlaybackState;
       }
     } catch (e) {
       console.warn('MediaSessionPlugin: Could not set media session playbackState', e);
     }
-  }
 
-  private _syncPositionState(state: PlayerState): void {
-    if (!('setPositionState' in navigator.mediaSession)) {
-      return;
-    }
-
-    const { duration, currentTime, currentTrack } = state;
     const hasValidDuration = duration > 0 && isFinite(duration);
 
-    if (currentTrack && hasValidDuration) {
+    // Only set position state if we have a valid duration and the state is playing/paused.
+    if ('setPositionState' in navigator.mediaSession) {
       try {
-        navigator.mediaSession.setPositionState({
-          duration: duration,
-          playbackRate: 1.0,
-          position: Math.min(currentTime, duration),
-        });
+        if (hasValidDuration && (sessionPlaybackState === 'playing' || sessionPlaybackState === 'paused')) {
+          navigator.mediaSession.setPositionState({
+            duration: duration,
+            playbackRate: 1.0,
+            position: Math.min(currentTime, duration),
+          });
+        } else {
+          // Clear position state if duration is invalid or playback is 'none'
+          navigator.mediaSession.setPositionState(undefined);
+        }
       } catch (e) {
         console.warn("MediaSessionPlugin: Could not set media session position state:", e);
       }
     }
-  }
 
-  private _syncActionHandlers(state: PlayerState): void {
-    const { queue, currentIndex, duration } = state;
-    const hasValidDuration = duration > 0 && isFinite(duration);
-
+    // Update dynamic action handlers
     try {
       const canNext = currentIndex >= 0 && currentIndex < queue.length - 1;
       navigator.mediaSession.setActionHandler('nexttrack', canNext ? () => this.player?.next() : null);

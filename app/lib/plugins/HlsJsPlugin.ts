@@ -4,27 +4,27 @@ import type {
   ErrorData,
   ManifestParsedData,
   LevelSwitchedData,
-  Level as HlsJsLevel,
+  Level as HlsJsLevel 
 } from 'hls.js';
-import type { PlayerPlugin, MediaSource, PluginLoadOptions, PluginMediaControlHandlers, PluginSelectableOption, PluginApi } from '../types';
+import type { PlayerPlugin, MediaSource, PluginLoadOptions, PluginMediaControlHandlers, PluginSelectableOption } from '../types';
+import type { PlayerStateStore } from '../state/PlayerStateStore';
 
 export class HlsJsPlugin implements PlayerPlugin {
   public name = 'HlsJsPlugin';
   private hlsInstance: Hls | null = null;
   private mediaElement: HTMLVideoElement | HTMLAudioElement | null = null;
   private currentContainer: HTMLElement | null = null;
-  private pluginApi: PluginApi | null = null;
+  private stateStore: PlayerStateStore | null = null;
   private eventListeners: Array<{ event: string, handler: EventListenerOrEventListenerObject }> = [];
   private hlsEventListeners: Array<{ event: Events, handler: (eventName: string, data: any) => void }> = [];
   private hlsLevels: HlsJsLevel[] = [];
-  private unregisterHooks: (() => void)[] = [];
 
 
-  isTypeSupported(source: MediaSource): boolean {
+  isTypeSupported = (source: MediaSource): boolean => {
     return source.format.toLowerCase() === 'hls' && Hls && Hls.isSupported();
   }
 
-  private _mapHlsLevelsToOptions(levels: HlsJsLevel[]): PluginSelectableOption[] {
+  private _mapHlsLevelsToOptions = (levels: HlsJsLevel[]): PluginSelectableOption[] => {
     const options: PluginSelectableOption[] = [{ id: 'auto', label: 'Auto (HLS)' }];
     levels.forEach((level, index) => {
       options.push({
@@ -37,125 +37,143 @@ export class HlsJsPlugin implements PlayerPlugin {
     return options;
   }
 
-  async load(
+  load = (
     source: MediaSource,
-    pluginApi: PluginApi,
+    stateStore: PlayerStateStore,
     options: PluginLoadOptions
-  ): Promise<PluginMediaControlHandlers> {
-    this.onTrackUnload(); 
-
-    if (!Hls || !Hls.isSupported()) {
-      pluginApi.events.callHook('plugin:error', { message: 'HLS.js is not supported or not loaded correctly.', fatal: true });
-      throw new Error('HLS.js is not supported or not loaded correctly.');
-    }
-
-    // Example of a plugin subscribing to a core hook and managing its lifecycle.
-    const unregister = pluginApi.hooks.hook('player:pause', () => {
-        console.log('[HlsJsPlugin] Reacting to player:pause hook.');
-    });
-    this.unregisterHooks.push(unregister);
-
-    this.pluginApi = pluginApi;
-    this.currentContainer = options.containerElement;
-    this.hlsLevels = []; 
-
-    this.mediaElement = document.createElement(source.mediaType === 'audio' ? 'audio' : 'video') as HTMLVideoElement | HTMLAudioElement;
-    this.mediaElement.setAttribute('playsinline', 'true');
-    this.mediaElement.controls = false;
-    this.mediaElement.volume = options.initialVolume;
-    this.mediaElement.muted = options.initialMute;
-
-    if (this.mediaElement instanceof HTMLVideoElement) {
-      (this.mediaElement as HTMLVideoElement).poster = source.src.startsWith('blob:') ? '' : (document.querySelector(`[data-src="${source.src}"]`) as HTMLVideoElement)?.poster || '';
-    }
-
-    this._attachMediaElementEventListeners(this.mediaElement, pluginApi);
-
-    const hlsConfig: Partial<HlsConfig> = {
-      debug: false, 
-      maxBufferLength: 30,
-      maxMaxBufferLength: 30,
-      maxBufferHole: 1.0,
-      manifestLoadingMaxRetry: 3,
-      manifestLoadingRetryDelay: 1000,
-      levelLoadingMaxRetry: 3,
-      levelLoadingRetryDelay: 1000,
-      fragLoadingMaxRetry: 3,
-      fragLoadingRetryDelay: 1000,
-      startLevel: -1, 
-    };
-    this.hlsInstance = new Hls(hlsConfig);
-
-    this._attachHlsEventListeners(this.hlsInstance, pluginApi);
-
-    this.hlsInstance.loadSource(source.src);
-    this.hlsInstance.attachMedia(this.mediaElement);
-
-    if (this.currentContainer) {
-      this.currentContainer.appendChild(this.mediaElement);
-      if (this.mediaElement instanceof HTMLVideoElement) {
-        this.mediaElement.style.width = '100%';
-        this.mediaElement.style.height = '100%';
-        this.mediaElement.style.objectFit = 'contain';
-      }
-    } else {
-      pluginApi.events.callHook('plugin:error', { message: 'HlsJsPlugin: Container element not provided.', fatal: true });
-      throw new Error('Container element not provided for HlsJsPlugin');
-    }
-
-    if (options.autoplay && this.mediaElement) {
-      this.mediaElement.play().catch(err => {
-        console.warn(`HlsJsPlugin: Autoplay prevented for ${source.src}`, err);
-        pluginApi.events.callHook('plugin:paused');
-      });
-    }
-
-    return {
-      play: async () => {
-        if (this.mediaElement) await this.mediaElement.play();
-      },
-      pause: () => {
-        if (this.mediaElement) this.mediaElement.pause();
-      },
-      stop: () => { 
-        if (this.hlsInstance) this.hlsInstance.stopLoad();
-        if (this.mediaElement) {
-          this.mediaElement.pause();
-          this.mediaElement.removeAttribute('src'); 
-          this.mediaElement.load(); 
+  ): Promise<PluginMediaControlHandlers> => {
+    return new Promise<PluginMediaControlHandlers>((resolve, reject) => {
+        this.onTrackUnload(); 
+    
+        if (!Hls || !Hls.isSupported()) {
+          const msg = 'HLS.js is not supported or not loaded correctly.';
+          stateStore.reportError(msg);
+          reject(new Error(msg));
+          return;
         }
-      },
-      seek: (time: number) => {
-        if (this.mediaElement) {
-          this.mediaElement.currentTime = time;
+
+        const hlsConfig: Partial<HlsConfig> = { /* ... hls config ... */ };
+        const hlsInstance = new Hls(hlsConfig);
+        this.hlsInstance = hlsInstance;
+
+        const loadTimeout = setTimeout(() => {
+            console.error('HlsPlugin: Loading timed out.');
+            cleanupInitialListeners();
+            reject(new Error('HLS loading timed out.'));
+        }, 15000); // 15 seconds timeout
+    
+        this.stateStore = stateStore;
+        this.currentContainer = options.containerElement;
+        this.hlsLevels = []; 
+    
+        this.mediaElement = document.createElement(source.mediaType === 'audio' ? 'audio' : 'video') as HTMLVideoElement | HTMLAudioElement;
+        this.mediaElement.setAttribute('playsinline', 'true');
+        this.mediaElement.controls = false;
+        this.mediaElement.volume = options.initialVolume;
+        this.mediaElement.muted = options.initialMute;
+    
+        if (this.mediaElement instanceof HTMLVideoElement) {
+          (this.mediaElement as HTMLVideoElement).poster = source.src.startsWith('blob:') ? '' : (document.querySelector(`[data-src="${source.src}"]`) as HTMLVideoElement)?.poster || '';
         }
-      },
-      setVolume: (volume: number, isMuted: boolean) => {
-        if (this.mediaElement) {
-          this.mediaElement.volume = volume;
-          this.mediaElement.muted = isMuted;
-          this.pluginApi?.events.callHook('plugin:volumechange', { volume: this.mediaElement.volume, isMuted: this.mediaElement.muted });
-        }
-      },
-      getHTMLElement: () => this.mediaElement,
-      setPluginOption: async (optionId: string) => {
-        if (this.hlsInstance) {
-          if (optionId === 'auto') {
-            this.hlsInstance.currentLevel = -1; 
-          } else {
-            const levelIndex = parseInt(optionId, 10);
-            if (!isNaN(levelIndex) && levelIndex >= 0 && levelIndex < this.hlsInstance.levels.length) {
-              this.hlsInstance.currentLevel = levelIndex;
-            } else {
-              console.warn(`HlsJsPlugin: Invalid level ID received: ${optionId}`);
+    
+        const cleanupInitialListeners = () => {
+            clearTimeout(loadTimeout);
+            hlsInstance.off(Events.MANIFEST_PARSED, onManifestParsed);
+            hlsInstance.off(Events.ERROR, onInitialError);
+        };
+
+        const onInitialError = (_event: string, data: ErrorData) => {
+            if (data.fatal) {
+                cleanupInitialListeners();
+                const errorDetailsMessage = `HLS Error: ${data.details} (type: ${data.type})`;
+                reject(new Error(errorDetailsMessage));
             }
-          }
-        }
-      },
-    };
+        };
+
+        const onManifestParsed = (_event: string, data: ManifestParsedData) => {
+            cleanupInitialListeners();
+
+            // Populate quality options immediately upon parsing the manifest.
+            if (hlsInstance.levels) {
+                this.hlsLevels = [...hlsInstance.levels];
+                stateStore.reportPluginOptionsAvailable(this._mapHlsLevelsToOptions(this.hlsLevels));
+                const initialActiveId = hlsInstance.autoLevelEnabled ? 'auto' : hlsInstance.currentLevel.toString();
+                stateStore.reportPluginOptionChanged(initialActiveId);
+            }
+
+            // Manifest is good, now we can attach full listeners and resolve
+            this._attachHlsEventListeners(hlsInstance, stateStore);
+            this._attachMediaElementEventListeners(this.mediaElement!, stateStore);
+            hlsInstance.attachMedia(this.mediaElement!);
+
+            if (this.currentContainer) {
+              this.currentContainer.appendChild(this.mediaElement!);
+              if (this.mediaElement instanceof HTMLVideoElement) {
+                this.mediaElement.style.width = '100%';
+                this.mediaElement.style.height = '100%';
+                this.mediaElement.style.objectFit = 'contain';
+              }
+            } else {
+              const msg = 'HlsPlugin: Container element not provided.';
+              stateStore.reportError(msg);
+              reject(new Error(msg));
+              return;
+            }
+    
+            if (options.autoplay && this.mediaElement) {
+              this.mediaElement.play().catch(err => {
+                console.warn(`HlsPlugin: Autoplay prevented for ${source.src}`, err);
+                stateStore.reportPaused();
+              });
+            }
+
+            resolve({
+                play: async () => { if (this.mediaElement) await this.mediaElement.play(); },
+                pause: () => { if (this.mediaElement) this.mediaElement.pause(); },
+                stop: () => { 
+                  if (this.hlsInstance) this.hlsInstance.stopLoad();
+                  if (this.mediaElement) {
+                    this.mediaElement.pause();
+                    this.mediaElement.removeAttribute('src'); 
+                    this.mediaElement.load(); 
+                  }
+                },
+                seek: (time: number) => { if (this.mediaElement) { this.mediaElement.currentTime = time; } },
+                setVolume: (volume: number, isMuted: boolean) => {
+                  if (this.mediaElement) {
+                    this.mediaElement.volume = volume;
+                    this.mediaElement.muted = isMuted;
+                    this.stateStore?.reportVolumeChange({ volume: this.mediaElement.volume, isMuted: this.mediaElement.muted });
+                  }
+                },
+                getHTMLElement: () => this.mediaElement,
+                setPluginOption: async (optionId: string) => {
+                  if (this.hlsInstance && this.stateStore) {
+                    // Optimistically update the UI state.
+                    this.stateStore.reportPluginOptionChanged(optionId);
+
+                    if (optionId === 'auto') {
+                      this.hlsInstance.currentLevel = -1;
+                    } else {
+                      const levelIndex = parseInt(optionId, 10);
+                      if (!isNaN(levelIndex) && levelIndex >= 0 && levelIndex < this.hlsInstance.levels.length) {
+                        this.hlsInstance.currentLevel = levelIndex;
+                      } else {
+                        console.warn(`HlsPlugin: Invalid level ID received: ${optionId}`);
+                      }
+                    }
+                  }
+                },
+            });
+        };
+
+        hlsInstance.on(Events.ERROR, onInitialError);
+        hlsInstance.on(Events.MANIFEST_PARSED, onManifestParsed);
+        hlsInstance.loadSource(source.src);
+    });
   }
 
-  private _removeEventListeners(): void {
+  private _removeEventListeners = (): void => {
     if (this.mediaElement) {
       this.eventListeners.forEach(({ event, handler }) => {
         this.mediaElement?.removeEventListener(event, handler as EventListenerOrEventListenerObject);
@@ -171,92 +189,79 @@ export class HlsJsPlugin implements PlayerPlugin {
     this.hlsEventListeners = [];
   }
 
-  private _attachMediaElementEventListeners(
+  private _attachMediaElementEventListeners = (
     mediaEl: HTMLAudioElement | HTMLVideoElement,
-    pluginApi: PluginApi
-  ): void {
+    stateStore: PlayerStateStore
+  ): void => {
     const add = (event: string, handler: EventListenerOrEventListenerObject) => {
       mediaEl.addEventListener(event, handler);
       this.eventListeners.push({ event, handler });
     };
 
-    add('loadstart', () => pluginApi.events.callHook('plugin:loading'));
-    add('loadedmetadata', () => { if (mediaEl.duration && mediaEl.duration !== Infinity) pluginApi.events.callHook('plugin:loadedmetadata', { duration: mediaEl.duration }); });
-    add('canplay', () => pluginApi.events.callHook('plugin:canplay'));
-    add('playing', () => pluginApi.events.callHook('plugin:playing'));
-    add('pause', () => pluginApi.events.callHook('plugin:paused'));
-    add('ended', () => pluginApi.events.callHook('plugin:ended'));
-    add('timeupdate', () => pluginApi.events.callHook('plugin:timeupdate', { currentTime: mediaEl.currentTime, duration: mediaEl.duration }));
-    add('durationchange', () => { if (mediaEl.duration && mediaEl.duration !== Infinity) pluginApi.events.callHook('plugin:durationchange', { duration: mediaEl.duration }); });
+    add('loadstart', () => stateStore.reportLoading());
+    add('loadedmetadata', () => { if (mediaEl.duration && mediaEl.duration !== Infinity) stateStore.reportLoadedMetadata({ duration: mediaEl.duration }); });
+    add('canplay', () => stateStore.reportCanPlay());
+    add('playing', () => stateStore.reportPlaying());
+    add('pause', () => stateStore.reportPaused());
+    add('ended', () => stateStore.reportEnded());
+    add('timeupdate', () => stateStore.reportTimeUpdate({ currentTime: mediaEl.currentTime, duration: mediaEl.duration }));
+    add('durationchange', () => { if (mediaEl.duration && mediaEl.duration !== Infinity) stateStore.reportDurationChange({ duration: mediaEl.duration }); });
     add('error', () => {
       const error = mediaEl.error;
-      pluginApi.events.callHook('plugin:error', {
-        message: `HTMLMediaElement error: Code ${error?.code || 'unknown'} - ${error?.message || 'No message'}`,
-        fatal: true,
-        details: error
-      });
+      stateStore.reportError(`HTMLMediaElement error: Code ${error?.code || 'unknown'} - ${error?.message || 'No message'}`);
     });
-    add('waiting', () => pluginApi.events.callHook('plugin:waiting'));
-    add('stalled', () => pluginApi.events.callHook('plugin:stalled'));
+    add('waiting', () => stateStore.reportWaiting());
+    add('stalled', () => stateStore.reportStalled());
     add('volumechange', () => {
-      pluginApi.events.callHook('plugin:volumechange', { volume: mediaEl.volume, isMuted: mediaEl.muted });
+      stateStore.reportVolumeChange({ volume: mediaEl.volume, isMuted: mediaEl.muted });
     });
     this.mediaElement = mediaEl;
   }
 
-  private _attachHlsEventListeners(hls: Hls, pluginApi: PluginApi): void {
+  private _attachHlsEventListeners = (hls: Hls, stateStore: PlayerStateStore): void => {
     const addHls = (event: Events, handler: (eventName: string, data: any) => void) => {
       hls.on(event, handler);
       this.hlsEventListeners.push({ event, handler });
     };
 
-    addHls(Events.MANIFEST_LOADING, () => pluginApi.events.callHook('plugin:loading'));
+    addHls(Events.MANIFEST_LOADING, () => stateStore.reportLoading());
 
+    // We already handled MANIFEST_PARSED to resolve the load promise, but we re-attach
+    // to update options if the manifest is reloaded (e.g. for live streams).
     addHls(Events.MANIFEST_PARSED, (_event, _data: ManifestParsedData) => {
       if (hls.levels) {
         this.hlsLevels = [...hls.levels]; 
-        pluginApi.events.callHook('plugin:optionsavailable', this._mapHlsLevelsToOptions(this.hlsLevels));
+        stateStore.reportPluginOptionsAvailable(this._mapHlsLevelsToOptions(this.hlsLevels));
       }
       const initialActiveId = hls.autoLevelEnabled ? 'auto' : hls.currentLevel.toString();
-      pluginApi.events.callHook('plugin:optionchanged', initialActiveId);
+      stateStore.reportPluginOptionChanged(initialActiveId);
     });
 
     addHls(Events.LEVEL_SWITCHED, (_event, data: LevelSwitchedData) => {
       const activeId = hls.autoLevelEnabled ? 'auto' : data.level.toString();
-      pluginApi.events.callHook('plugin:optionchanged', activeId);
+      stateStore.reportPluginOptionChanged(activeId);
     });
 
+    // This error handler is for non-fatal errors during playback
     addHls(Events.ERROR, (_event, data: ErrorData) => {
-      if (!this.hlsInstance) return;
+      if (!this.hlsInstance || data.fatal) return; // Fatal errors are handled during load
       const errorDetailsMessage = `HLS Error: ${data.details} (type: ${data.type})`;
 
       if (data.type === ErrorTypes.MEDIA_ERROR) {
-        if (data.fatal) {
           if (data.details === ErrorDetails.BUFFER_STALLED_ERROR || data.details === ErrorDetails.BUFFER_SEEK_OVER_HOLE) {
             this.hlsInstance.recoverMediaError();
+          } else {
+             stateStore.reportWaiting();
           }
-          pluginApi.events.callHook('plugin:error', { message: errorDetailsMessage, fatal: true, details: data });
-        } else {
-          if (data.details === ErrorDetails.BUFFER_STALLED_ERROR) pluginApi.events.callHook('plugin:stalled');
-          else if (data.details === ErrorDetails.BUFFER_SEEK_OVER_HOLE) pluginApi.events.callHook('plugin:waiting');
-          else pluginApi.events.callHook('plugin:waiting');
-        }
       } else if (data.type === ErrorTypes.NETWORK_ERROR) {
-        if (data.fatal) {
-          pluginApi.events.callHook('plugin:error', { message: errorDetailsMessage, fatal: true, details: data });
-        } else {
-          pluginApi.events.callHook('plugin:waiting');
-        }
+          stateStore.reportWaiting();
       } else {
-        pluginApi.events.callHook('plugin:error', { message: errorDetailsMessage, fatal: data.fatal, details: data });
+        stateStore.reportError(errorDetailsMessage);
       }
     });
   }
 
-  onTrackUnload(): void {
-    this.unregisterHooks.forEach(unhook => unhook());
-    this.unregisterHooks = [];
-
+  onTrackUnload = (): void => {
     this._removeEventListeners(); 
     if (this.hlsInstance) {
       this.hlsInstance.stopLoad(); 
@@ -274,11 +279,11 @@ export class HlsJsPlugin implements PlayerPlugin {
       this.mediaElement = null;
     }
     this.currentContainer = null;
-    this.pluginApi = null;
+    this.stateStore = null;
     this.hlsLevels = [];
   }
 
-  destroy(): void {
+  destroy = (): void => {
     this.onTrackUnload();
   }
 }

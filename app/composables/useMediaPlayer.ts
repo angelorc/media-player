@@ -1,4 +1,3 @@
-import { ref, computed, readonly, onUnmounted } from 'vue'
 import type { PlayerState, Subscription } from '~/lib/types'
 
 export function useMediaPlayer() {

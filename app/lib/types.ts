@@ -1,10 +1,10 @@
-import type { HookableCore } from './HookableCore';
+import type { PlayerStateStore } from './state/PlayerStateStore';
 
 export interface MediaMetadata {
   title?: string;
   artist?: string;
   album?: string;
-  artwork?: string;
+  artwork?: string; // URL to image
 }
 
 export interface MediaSource {
@@ -64,16 +64,6 @@ export interface Subscription {
   unsubscribe: () => void;
 }
 
-/**
- * Defines the API exposed to plugins, providing access to the player's
- * lifecycle hooks and the event bus for communication back to the core.
- */
-export interface PluginApi {
-  hooks: HookableCore; // The player's lifecycle hooks. Plugins can listen to these.
-  events: HookableCore; // The event bus for plugin->core communication. Plugins emit events here.
-}
-
-
 export interface PluginLoadOptions {
   containerElement: HTMLElement;
   initialVolume: number;
@@ -95,8 +85,6 @@ export interface PluginMediaControlHandlers {
 
 
 export interface MediaPlayerPublicApi {
-    hooks: HookableCore;
-    events: HookableCore;
     subscribe(callback: StateSubscriber): Subscription;
     getState(): PlayerState;
     loadQueue(tracks: MediaTrack[], containerElement: HTMLElement, startIndex?: number, playImmediately?: boolean): void;
@@ -116,6 +104,7 @@ export interface MediaPlayerPublicApi {
     setPreferences(prefs: Partial<PlayerPreferences>): void;
     setActiveSource(newSource: MediaSource): Promise<void>;
     setPluginOption(optionId: string): Promise<void>;
+    setPlaybackType(type: 'audio' | 'video'): Promise<void>;
 }
 
 export interface PlayerPlugin {
@@ -145,13 +134,13 @@ export interface PlayerPlugin {
   /**
    * (For 'source' plugins) Loads a media source for playback.
    * @param source - The media source to load.
-   * @param pluginApi - Provides access to player lifecycle hooks and event bus.
+   * @param stateStore - The player's state store for reporting state changes.
    * @param options - Loading options like container element and autoplay settings.
    * @returns A promise that resolves with media control handlers.
    */
   load?(
     source: MediaSource,
-    pluginApi: PluginApi,
+    stateStore: PlayerStateStore,
     options: PluginLoadOptions
   ): Promise<PluginMediaControlHandlers | void>;
 

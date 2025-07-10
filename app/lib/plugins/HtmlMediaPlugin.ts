@@ -1,4 +1,5 @@
-import type { PlayerPlugin, MediaSource, PluginLoadOptions, PluginMediaControlHandlers, PluginApi } from '../types';
+import type { PlayerPlugin, MediaSource, PluginLoadOptions, PluginMediaControlHandlers } from '../types';
+import type { PlayerStateStore } from '../state/PlayerStateStore';
 
 const StandardMimeTypes: Record<string, string> = {
   // Audio
@@ -20,10 +21,10 @@ export class HtmlMediaPlugin implements PlayerPlugin {
   public name = 'HtmlMediaPlugin';
   private mediaElement: HTMLVideoElement | HTMLAudioElement | null = null;
   private currentContainer: HTMLElement | null = null;
-  private pluginApi: PluginApi | null = null;
+  private stateStore: PlayerStateStore | null = null;
   private eventListeners: Array<{ event: string, handler: EventListenerOrEventListenerObject }> = [];
 
-  isTypeSupported(source: MediaSource): boolean {
+  isTypeSupported = (source: MediaSource): boolean => {
     const mimeType = StandardMimeTypes[source.format.toLowerCase()];
     if (!mimeType) return false;
 
@@ -37,82 +38,120 @@ export class HtmlMediaPlugin implements PlayerPlugin {
     return !!canPlayResult;
   }
 
-  async load(
+  load = (
     source: MediaSource,
-    pluginApi: PluginApi,
+    stateStore: PlayerStateStore,
     options: PluginLoadOptions
-  ): Promise<PluginMediaControlHandlers> {
-    this.onTrackUnload(); 
-
-    this.pluginApi = pluginApi;
-    this.currentContainer = options.containerElement;
-
-    this.mediaElement = document.createElement(source.mediaType) as HTMLVideoElement | HTMLAudioElement;
-    this.mediaElement.setAttribute('playsinline', 'true');
-    this.mediaElement.controls = false; 
-    this.mediaElement.volume = options.initialVolume;
-    this.mediaElement.muted = options.initialMute;
-    
-    if (source.mediaType === 'video') {
-        (this.mediaElement as HTMLVideoElement).poster = source.src.startsWith('blob:') ? '' : (source.mediaType === 'video' ? (document.querySelector(`[data-src="${source.src}"]`) as HTMLVideoElement)?.poster || '' : '');
-    }
-
-
-    this._attachEventListeners(this.mediaElement, pluginApi);
-    
-    this.mediaElement.src = source.src;
-    this.mediaElement.load();
-
-    if (this.currentContainer) {
-      this.currentContainer.appendChild(this.mediaElement);
-      if (this.mediaElement instanceof HTMLVideoElement) {
-        this.mediaElement.style.width = '100%';
-        this.mediaElement.style.height = '100%';
-        this.mediaElement.style.objectFit = 'contain';
-      }
-    } else {
-        this.pluginApi.events.callHook('plugin:error', { message: 'HtmlMediaPlugin: Container element not provided.', fatal: true });
-        throw new Error('Container element not provided for HtmlMediaPlugin');
-    }
-
-    if (options.autoplay) {
-      this.mediaElement.play().catch(err => {
-        console.warn(`HtmlMediaPlugin: Autoplay prevented for ${source.src}`, err);
-        this.pluginApi?.events.callHook('plugin:paused');
-      });
-    }
-
-
-    return {
-      play: async () => {
-        if (this.mediaElement) await this.mediaElement.play();
-      },
-      pause: () => {
-        if (this.mediaElement) this.mediaElement.pause();
-      },
-      stop: () => { 
-        if (this.mediaElement) {
-          this.mediaElement.pause();
-          this.mediaElement.removeAttribute('src');
-          this.mediaElement.load(); 
-        }
+  ): Promise<PluginMediaControlHandlers> => {
+    return new Promise<PluginMediaControlHandlers>((resolve, reject) => {
         this.onTrackUnload(); 
-      },
-      seek: (time: number) => {
-        if (this.mediaElement) this.mediaElement.currentTime = time;
-      },
-      setVolume: (volume: number, isMuted: boolean) => {
-        if (this.mediaElement) {
-          this.mediaElement.volume = volume;
-          this.mediaElement.muted = isMuted;
-          this.pluginApi?.events.callHook('plugin:volumechange', { volume: this.mediaElement.volume, isMuted: this.mediaElement.muted });
+
+        this.stateStore = stateStore;
+        this.currentContainer = options.containerElement;
+
+        const mediaElement = document.createElement(source.mediaType) as HTMLVideoElement | HTMLAudioElement;
+        this.mediaElement = mediaElement; // Assign early for cleanup and access in handlers
+
+        const loadTimeout = setTimeout(() => {
+            console.error('HtmlMediaPlugin: Loading timed out.');
+            cleanupInitialListeners();
+            reject(new Error(`Loading media timed out for ${source.src}`));
+        }, 15000); // 15 second timeout
+
+        mediaElement.setAttribute('playsinline', 'true');
+        mediaElement.controls = false; 
+        mediaElement.volume = options.initialVolume;
+        mediaElement.muted = options.initialMute;
+        
+        if (source.mediaType === 'video') {
+            (mediaElement as HTMLVideoElement).poster = source.src.startsWith('blob:') ? '' : (document.querySelector(`[data-src="${source.src}"]`) as HTMLVideoElement)?.poster || '';
         }
-      },
-      getHTMLElement: () => this.mediaElement,
-    };
+
+        const cleanupInitialListeners = () => {
+            clearTimeout(loadTimeout);
+            mediaElement.removeEventListener('canplay', onCanPlay);
+            mediaElement.removeEventListener('error', onError);
+        };
+
+        const onError = () => {
+            cleanupInitialListeners();
+            const error = mediaElement.error;
+            let errorMsg = `Media Error: Code ${error?.code}`;
+            if (error) {
+                switch (error.code) {
+                    case MediaError.MEDIA_ERR_ABORTED: errorMsg += ' - Playback aborted.'; break;
+                    case MediaError.MEDIA_ERR_NETWORK: errorMsg += ' - Network error.'; break;
+                    case MediaError.MEDIA_ERR_DECODE: errorMsg += ' - Decoding error.'; break;
+                    case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED: errorMsg += ' - Source not supported.'; break;
+                    default: errorMsg += ' - Unknown media error.'; break;
+                }
+            } else {
+                errorMsg = 'An unknown media error occurred on the element.';
+            }
+            reject(new Error(errorMsg));
+        };
+        
+        const onCanPlay = () => {
+            cleanupInitialListeners();
+
+            // Now that we know it can play, attach all the other state-updating listeners
+            this._attachEventListeners(mediaElement, stateStore);
+            
+            if (options.autoplay) {
+              mediaElement.play().catch(err => {
+                console.warn(`HtmlMediaPlugin: Autoplay prevented for ${source.src}`, err);
+                this.stateStore?.reportPaused();
+              });
+            }
+            
+            // Resolve with the control handlers
+            resolve({
+                play: async () => { if (this.mediaElement) await this.mediaElement.play(); },
+                pause: () => { if (this.mediaElement) this.mediaElement.pause(); },
+                stop: () => { 
+                  if (this.mediaElement) {
+                    this.mediaElement.pause();
+                    this.mediaElement.removeAttribute('src');
+                    this.mediaElement.load(); 
+                  }
+                  this.onTrackUnload(); 
+                },
+                seek: (time: number) => { if (this.mediaElement) this.mediaElement.currentTime = time; },
+                setVolume: (volume: number, isMuted: boolean) => {
+                  if (this.mediaElement) {
+                    this.mediaElement.volume = volume;
+                    this.mediaElement.muted = isMuted;
+                    this.stateStore?.reportVolumeChange({ volume: this.mediaElement.volume, isMuted: this.mediaElement.muted });
+                  }
+                },
+                getHTMLElement: () => this.mediaElement,
+            });
+        };
+        
+        mediaElement.addEventListener('error', onError);
+        mediaElement.addEventListener('canplay', onCanPlay);
+
+        if (this.currentContainer) {
+            this.currentContainer.appendChild(mediaElement);
+            if (mediaElement instanceof HTMLVideoElement) {
+                mediaElement.style.width = '100%';
+                mediaElement.style.height = '100%';
+                mediaElement.style.objectFit = 'contain';
+            }
+        } else {
+            const msg = 'HtmlMediaPlugin: Container element not provided.';
+            this.stateStore.reportError(msg);
+            cleanupInitialListeners();
+            reject(new Error(msg));
+            return;
+        }
+
+        mediaElement.src = source.src;
+        mediaElement.load();
+    });
   }
   
-  private _removeEventListeners(): void {
+  private _removeEventListeners = (): void => {
     if (this.mediaElement) {
         this.eventListeners.forEach(({event, handler}) => {
             this.mediaElement?.removeEventListener(event, handler);
@@ -121,28 +160,32 @@ export class HtmlMediaPlugin implements PlayerPlugin {
     this.eventListeners = [];
   }
 
-  private _attachEventListeners(
+  private _attachEventListeners = (
     mediaEl: HTMLAudioElement | HTMLVideoElement,
-    pluginApi: PluginApi
-  ): void {
+    stateStore: PlayerStateStore
+  ): void => {
     this._removeEventListeners(); 
 
     const add = (event: string, handler: EventListenerOrEventListenerObject) => {
         mediaEl.addEventListener(event, handler);
         this.eventListeners.push({event, handler});
     };
-
-    add('loadstart', () => pluginApi.events.callHook('plugin:loading'));
-    add('loadedmetadata', () => pluginApi.events.callHook('plugin:loadedmetadata', { duration: mediaEl.duration }));
+    
+    // Note: 'canplay' and 'error' are handled initially in `load`. We re-attach `error` here
+    // to catch issues that might occur *after* initial loading.
+    add('loadstart', () => stateStore.reportLoading());
+    add('loadedmetadata', () => stateStore.reportLoadedMetadata({ duration: mediaEl.duration }));
     add('loadeddata', () => { /* Often implies canplaythrough will follow, or at least canplay */ });
-    add('canplay', () => pluginApi.events.callHook('plugin:canplay'));
-    add('canplaythrough', () => pluginApi.events.callHook('plugin:canplay')); 
-    add('playing', () => pluginApi.events.callHook('plugin:playing'));
+    add('canplaythrough', () => stateStore.reportCanPlay()); 
+    add('playing', () => stateStore.reportPlaying());
     add('play', () => { /* Play intent, `playing` event confirms actual start */ });
-    add('pause', () => pluginApi.events.callHook('plugin:paused'));
-    add('ended', () => pluginApi.events.callHook('plugin:ended'));
-    add('timeupdate', () => pluginApi.events.callHook('plugin:timeupdate', { currentTime: mediaEl.currentTime, duration: mediaEl.duration }));
-    add('durationchange', () => pluginApi.events.callHook('plugin:durationchange', { duration: mediaEl.duration }));
+    add('pause', () => stateStore.reportPaused());
+    add('ended', () => {
+      stateStore.reportEnded();
+      // After reporting ended, the core player logic will handle 'next'
+    });
+    add('timeupdate', () => stateStore.reportTimeUpdate({ currentTime: mediaEl.currentTime, duration: mediaEl.duration }));
+    add('durationchange', () => stateStore.reportDurationChange({ duration: mediaEl.duration }));
     add('error', () => {
       const error = mediaEl.error;
       let errorMsg = `Media Error: Code ${error?.code}`;
@@ -157,19 +200,19 @@ export class HtmlMediaPlugin implements PlayerPlugin {
       } else {
         errorMsg = 'An unknown media error occurred on the element.';
       }
-      pluginApi.events.callHook('plugin:error', { message: errorMsg, fatal: true, details: error });
+      stateStore.reportError(errorMsg);
     });
-    add('waiting', () => pluginApi.events.callHook('plugin:waiting'));
-    add('stalled', () => pluginApi.events.callHook('plugin:stalled'));
+    add('waiting', () => stateStore.reportWaiting());
+    add('stalled', () => stateStore.reportStalled());
     
     add('volumechange', () => {
-        pluginApi.events.callHook('plugin:volumechange', { volume: mediaEl.volume, isMuted: mediaEl.muted });
+        stateStore.reportVolumeChange({ volume: mediaEl.volume, isMuted: mediaEl.muted });
     });
 
     this.mediaElement = mediaEl;
   }
 
-  onTrackUnload(): void {
+  onTrackUnload = (): void => {
     this._removeEventListeners();
     if (this.mediaElement) {
       this.mediaElement.pause();
@@ -181,10 +224,10 @@ export class HtmlMediaPlugin implements PlayerPlugin {
       this.mediaElement = null;
     }
     this.currentContainer = null;
-    this.pluginApi = null;
+    this.stateStore = null;
   }
 
-  destroy(): void {
+  destroy = (): void => {
     this.onTrackUnload(); 
   }
 }

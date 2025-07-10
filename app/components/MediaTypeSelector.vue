@@ -21,24 +21,16 @@ const buttonIcon = computed(() =>
   isVideoMode.value ? Music : Video
 )
 
+const hasVideoSource = computed(() => state.value.currentTrack?.sources?.some(source => source.mediaType === 'video'))
+
 const toggleMediaType = () => {
   if (!$mediaPlayer) return
   
   try {
     if (isVideoMode.value) {
-      $mediaPlayer.setPreferences({
-        ...currentPreferences.value,
-        mediaType: ['audio', 'video'],
-        formats: [...(currentPreferences.value.formats || [])]
-      })
-      console.log('MediaTypeSelector: Switched to audio mode')
+      $mediaPlayer.setPlaybackType('audio')
     } else {
-      $mediaPlayer.setPreferences({
-        ...currentPreferences.value,
-        mediaType: ['video', 'audio'],
-        formats: Array.from(currentPreferences.value.formats || [])
-      })
-      console.log('MediaTypeSelector: Switched to video mode')
+      $mediaPlayer.setPlaybackType('video')
     }
   } catch (error) {
     console.error('MediaTypeSelector: Error toggling media type:', error)
@@ -51,11 +43,12 @@ const toggleMediaType = () => {
     variant="ghost" 
     size="sm" 
     @click="toggleMediaType"
-    :title="buttonText"
     class="flex items-center gap-2"
+    :aria-label="buttonText"
+    :title="buttonText"
+    :disabled="!hasVideoSource && isVideoMode"
   >
     <component :is="buttonIcon" class="h-4 w-4" />
-    <span class="hidden sm:inline">{{ buttonText }}</span>
   </Button>
 </template>
 

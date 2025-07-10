@@ -5,7 +5,7 @@ import type { PlayerState, PlayerPreferences, StateSubscriber, Subscription, Med
 export const DEFAULT_PREFERENCES: PlayerPreferences = {
   mediaType: ['video', 'audio'],
   formats: ['youtube', 'opus', 'hls', 'mp4', 'webm', 'ogv', 'mov', 'mp3', 'ogg', 'wav', 'flac', 'aac', 'm4a'],
-  autoplay: false,
+  autoplay: true,
 };
 
 const initialPlayerStateDefinition: Readonly<PlayerState> = {
@@ -27,6 +27,10 @@ const initialPlayerStateDefinition: Readonly<PlayerState> = {
   activePluginOptionId: null,
 };
 
+/**
+ * Manages the state of the media player using a Zustand store.
+ * Encapsulates state update logic via a declarative API.
+ */
 export class PlayerStateStore {
   public store: StoreApi<PlayerState>;
   private _preMuteVolume: number;
@@ -40,6 +44,7 @@ export class PlayerStateStore {
       : (finalInitialState.volume > 0 ? finalInitialState.volume : 0.5);
   }
 
+  // --- Core Methods ---
   public getState = (): PlayerState => this.store.getState();
   
   public subscribe = (callback: StateSubscriber): Subscription => {
@@ -50,13 +55,15 @@ export class PlayerStateStore {
   
   public getPreMuteVolume = (): number => this._preMuteVolume;
   public setPreMuteVolume = (volume: number): void => { this._preMuteVolume = volume; }
-   
+  
+  // --- State Action API ---
+  
   public setPreferences = (prefs: Partial<PlayerPreferences>): void => {
     const currentPrefs = this.getState().preferences;
     this.store.setState({ preferences: { ...currentPrefs, ...prefs } });
   }
 
-  public setQueue = (tracks: MediaTrack[]): void => {
+  public resetForQueue = (tracks: MediaTrack[]): void => {
     this.store.setState({
       queue: tracks,
       currentIndex: -1,
@@ -77,25 +84,29 @@ export class PlayerStateStore {
     }
   }
 
-  public startTrackChange = (index: number, track: MediaTrack, targetSource: MediaSource, targetPluginName: string, needsPluginChange: boolean): void => {
+  public startTrackLoad = (index: number, track: MediaTrack, targetSource: MediaSource, targetPluginName: string, needsPluginChange: boolean): void => {
     const currentState = this.getState();
-    const currentDuration = track.duration || currentState.duration || 0;
 
+    // If a new track is being loaded, use its metadata duration if available, otherwise reset to 0.
+    // If just the source is changing for the same track, keep the current duration.
+    const newDuration = needsPluginChange ? (track.duration ?? 0) : currentState.duration;
+    
     this.store.setState({
-      isLoading: true,
-      playbackState: 'LOADING',
-      currentIndex: index,
-      currentTrack: track,
-      activeSource: targetSource,
-      activePluginName: targetPluginName,
-      duration: needsPluginChange ? 0 : currentDuration,
-      currentTime: needsPluginChange ? 0 : currentState.currentTime,
-      error: null,
-      ...(needsPluginChange && { pluginOptions: [], activePluginOptionId: null }),
+        isLoading: true,
+        playbackState: 'LOADING',
+        currentIndex: index,
+        currentTrack: track,
+        activeSource: targetSource,
+        activePluginName: targetPluginName,
+        currentTime: needsPluginChange ? 0 : currentState.currentTime,
+        duration: newDuration,
+        error: null,
+        // If plugin changes, also clear plugin-specific options from the old plugin
+        ...(needsPluginChange && { pluginOptions: [], activePluginOptionId: null }),
     });
   }
   
-  public setCanPlay = () => {
+  public reportCanPlay = () => {
     this.store.setState({ isLoading: false }); 
     const latestState = this.getState();
     if (!latestState.isPlaying && latestState.playbackState !== 'ERROR' && latestState.playbackState !== 'PLAYING') {
@@ -103,24 +114,24 @@ export class PlayerStateStore {
     }
   }
 
-  public setPlaying = () => this.store.setState({ isPlaying: true, isLoading: false, playbackState: 'PLAYING', error: null });
-  public setPaused = () => this.store.setState({ isPlaying: false, playbackState: 'PAUSED' });
-  public setEnded = () => {
+  public reportPlaying = () => this.store.setState({ isPlaying: true, isLoading: false, playbackState: 'PLAYING', error: null });
+  public reportPaused = () => this.store.setState({ isPlaying: false, playbackState: 'PAUSED' });
+  public reportEnded = () => {
     const endedState = this.getState();
     this.store.setState({ isPlaying: false, playbackState: 'ENDED', currentTime: endedState.duration });
   };
   
-  public setLoading = () => this.store.setState({ isLoading: true, playbackState: 'LOADING' });
-  public setStalled = () => this.store.setState({ isLoading: true, playbackState: 'STALLED' });
-  public setWaiting = () => this.store.setState({ isLoading: true, playbackState: 'LOADING' });
+  public reportLoading = () => this.store.setState({ isLoading: true, playbackState: 'LOADING' });
+  public reportStalled = () => this.store.setState({ isLoading: true, playbackState: 'STALLED' });
+  public reportWaiting = () => this.store.setState({ isLoading: true, playbackState: 'LOADING' });
 
-  public setTimeUpdate = (data: { currentTime: number, duration?: number }) => this.store.setState({ currentTime: data.currentTime, duration: data.duration ?? this.getState().duration });
-  public setDurationChange = (data: { duration: number }) => this.store.setState({ duration: data.duration });
-  public setMetadataLoaded = (metadata: { duration: number }) => this.store.setState({ duration: metadata.duration, isLoading: false });
+  public reportTimeUpdate = (data: { currentTime: number, duration?: number }) => this.store.setState({ currentTime: data.currentTime, duration: data.duration ?? this.getState().duration });
+  public reportDurationChange = (data: { duration: number }) => this.store.setState({ duration: data.duration });
+  public reportLoadedMetadata = (metadata: { duration: number }) => this.store.setState({ duration: metadata.duration, isLoading: false });
 
-  public setError = (message: string) => this.store.setState({ error: message, playbackState: 'ERROR', isLoading: false, isPlaying: false });
+  public reportError = (message: string) => this.store.setState({ error: message, playbackState: 'ERROR', isLoading: false, isPlaying: false });
 
-  public setVolume = (data: { volume: number; isMuted: boolean; }) => {
+  public reportVolumeChange = (data: { volume: number; isMuted: boolean; }) => {
     const currentState = this.getState();
     if (data.isMuted && !currentState.isMuted) {
       this.setPreMuteVolume(currentState.volume > 0 ? currentState.volume : 0.5);
@@ -130,8 +141,8 @@ export class PlayerStateStore {
     this.store.setState(data);
   }
 
-  public setPluginOptionsAvailable = (options: PluginSelectableOption[]) => this.store.setState({ pluginOptions: options });
-  public setActivePluginOption = (optionId: string) => this.store.setState({ activePluginOptionId: optionId });
+  public reportPluginOptionsAvailable = (options: PluginSelectableOption[]) => this.store.setState({ pluginOptions: options });
+  public reportPluginOptionChanged = (optionId: string) => this.store.setState({ activePluginOptionId: optionId });
 
   public addToQueue = (track: MediaTrack) => {
       const currentState = this.getState();
@@ -139,7 +150,7 @@ export class PlayerStateStore {
       this.store.setState({ queue: newQueue });
   }
 
-  public reset = () => {
+  public resetPlayback = () => {
     this.store.setState({
       playbackState: 'IDLE',
       isPlaying: false,
@@ -156,7 +167,7 @@ export class PlayerStateStore {
     });
   }
   
-  public endTrackChange = () => {
+  public postLoadUpdate = () => {
     const postLoadState = this.getState();
     if (postLoadState.playbackState === 'LOADING' && !postLoadState.isPlaying && !postLoadState.error) {
       this.store.setState({ playbackState: 'PAUSED', isLoading: false });
