@@ -95,7 +95,7 @@ export class MediaSessionPlugin implements PlayerPlugin {
         navigator.mediaSession.metadata = new window.MediaMetadata({
           title: metadata.title || 'Untitled Track',
           artist: metadata.artist || 'Unknown Artist',
-          album: metadata.album || 'Unknown Album',
+          album: 'on BitSong',
           artwork
         });
         this.lastSyncedTrackId = currentTrack.id;
